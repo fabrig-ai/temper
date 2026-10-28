@@ -44,33 +44,7 @@ fn gather(checks: Box<[Status]>, log: &[u8], budget: u32) -> Domain {
                 / 2,
         )
         .max(1);
-    let mut d = domain();
-    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
-    let mut row = fixtures::opening_row();
-    row.pull = Some(1);
-    row.change.last_head = Some(HEAD);
-    row.change.state = temper_engine_domain_forge_change::State::Repairing {
-        requested: true,
-        why: temper_engine_domain_forge_change::Repair::Ci,
-    };
-    outputs(&mut d, Event::Change { row });
-    outputs(
-        &mut d,
-        Event::PlanBrief {
-            section: SECTION,
-            source: BriefSource::Ci {
-                item: BriefItem { repository: REPO.repository, number: 1 },
-                head: BriefCommit(HEAD),
-            },
-        },
-    );
-    let started =
-        outputs(&mut d, Event::GatherPlanned { section: SECTION, parts: 2, bytes: budget, ci_budget: budget });
-    let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, read, .. } }] = started.as_ref() else {
-        panic!("one checks read: {started:?}")
-    };
-    assert_eq!(*read, Read::Checks { commit: HEAD });
-    let owner = *owner;
+    let (mut d, owner) = start_gather(budget);
     let mut out = Queue::with_capacity(max_out(&LIMITS));
     assert!(brief::brief_answer(&mut d, owner, Ok(Answer::Checks(checks)), &mut out));
     for _ in 0..LIMITS.client.rows.saturating_add(1) {
@@ -101,6 +75,36 @@ fn gather(checks: Box<[Status]>, log: &[u8], budget: u32) -> Domain {
     d
 }
 
+fn start_gather(budget: u32) -> (Domain, Token) {
+    let mut d = domain();
+    outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
+    let mut row = fixtures::opening_row();
+    row.pull = Some(1);
+    row.change.last_head = Some(HEAD);
+    row.change.state = temper_engine_domain_forge_change::State::Repairing {
+        requested: true,
+        why: temper_engine_domain_forge_change::Repair::Ci,
+    };
+    outputs(&mut d, Event::Change { row });
+    outputs(
+        &mut d,
+        Event::PlanBrief {
+            section: SECTION,
+            source: BriefSource::Ci {
+                item: BriefItem { repository: REPO.repository, number: 1 },
+                head: BriefCommit(HEAD),
+            },
+        },
+    );
+    let started =
+        outputs(&mut d, Event::GatherPlanned { section: SECTION, parts: 2, bytes: budget, ci_budget: budget });
+    let [Request::BriefClient { event: skein_forge_client::Event::Read { owner, read, .. } }] = started.as_ref() else {
+        panic!("one checks read: {started:?}")
+    };
+    assert_eq!(*read, Read::Checks { commit: HEAD });
+    (d, *owner)
+}
+
 fn take(d: &mut Domain) -> Box<[u8]> {
     d.take_brief(SECTION).expect("retained CI section")
 }
@@ -121,6 +125,82 @@ fn a_runners_failure_reaches_the_repair_at_shipped_limits() {
     }
     assert!(!words.contains("cut]"));
     assert!(!words.contains("truncated"));
+}
+
+#[test]
+fn a_full_forge_client_keeps_the_briefs_job_demand_until_a_slot_is_released() {
+    let (mut d, owner) = start_gather(SHIPPED_CI);
+    outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
+    outputs(&mut d, Event::ReadAfresh);
+    for number in 1..=u64::from(CLIENT.pending) {
+        let offered = outputs(
+            &mut d,
+            Event::Client(skein_forge_client::Event::Read {
+                owner: Token::new((1_u64 << 61_u32) | number),
+                repository: REPO,
+                read: Read::Settings,
+            }),
+        );
+        assert!(offered.is_empty());
+    }
+    let mut calls = Queue::uncapped();
+    resume(&mut d, &env(), &mut calls);
+    let Some(Request::Call { call: held, .. }) = calls.pop() else { panic!("held call") };
+    let mut out = Queue::uncapped();
+    assert!(brief::brief_answer(&mut d, owner, Ok(Answer::Checks(red_checks())), &mut out));
+    let Some(Request::BriefClient { event }) = out.pop() else { panic!("job demand") };
+    assert!(outputs(&mut d, Event::Client(event)).is_empty(), "the full client keeps the brief pending");
+    assert!(d.take_brief(SECTION).is_none(), "no early placeholder");
+    outputs(
+        &mut d,
+        Event::Client(skein_forge_client::Event::Answered {
+            call: held,
+            cost: 1,
+            free: 0,
+            rate: None,
+            result: Err(skein_forge::api::Error::Forbidden),
+        }),
+    );
+    d.reclaim();
+    assert!(d.is_ready(), "slot release wakes the retained demand at the same time");
+    let mut jobs = 0_u32;
+    let mut completed = 0_u32;
+    for _ in 0..CLIENT.pending {
+        resume(&mut d, &env(), &mut calls);
+        let Some(Request::Call { call, op, .. }) = calls.pop() else { panic!("retained call") };
+        let result = match op {
+            skein_forge::api::Op::Read(Read::Job { attempt, .. }) => {
+                jobs += 1;
+                assert_eq!(attempt.head, HEAD);
+                Ok(Answer::Job {
+                    attempt,
+                    step: Some(Step { number: 2, name: STEP.into() }),
+                    log: RUNNER_LOG.into(),
+                    truncated: false,
+                })
+            }
+            skein_forge::api::Op::Read(Read::Settings) => Err(skein_forge::api::Error::Forbidden),
+            other @ (skein_forge::api::Op::Read(_) | skein_forge::api::Op::Write(_)) => {
+                panic!("unexpected call: {other:?}")
+            }
+        };
+        for request in outputs(
+            &mut d,
+            Event::Client(skein_forge_client::Event::Answered { call, cost: 1, free: 0, rate: None, result }),
+        ) {
+            if let Request::BriefSized { section: SECTION, size: Some(_) } = request {
+                completed += 1;
+            }
+        }
+        d.reclaim();
+    }
+    assert_eq!((jobs, completed), (1, 1), "one job read and one completed brief");
+    let bytes = take(&mut d);
+    let words = text(&bytes);
+    assert!(words.contains("Failed step: 2 Each pull request adds changes/<its number>.md\nEnd of its log:\n"));
+    assert!(words.contains("Missing changes/1.md"));
+    assert!(!words.contains("could not be read"));
+    assert!(!d.is_ready());
 }
 
 #[test]
