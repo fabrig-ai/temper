@@ -454,7 +454,7 @@ fn old_form_owned_and_managed_serve_reads_without_start_time_writing_plans() {
             }]
         );
         let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-        let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+        let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
         assert!(setup.lifecycle.adoptions.is_empty());
         assert!(setup.runs.is_empty());
         assert!(endpoints.forges.get(0).unwrap().access.is_some());
@@ -480,7 +480,7 @@ fn an_unserved_old_form_fake_drops_its_adoptions_and_names_the_exclusion_without
     let config = old_form_configured(false);
     let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
     endpoints.forges.get_mut(0).unwrap().address = skein_io::Addr::Ip(([192, 0, 2, 7], 9).into());
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
+    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, false).unwrap();
     assert!(endpoints.forges.get(0).unwrap().access.is_none());
     let mut service = old_form_service(false);
     service.engine.as_mut().expect("engine").setup = setup;

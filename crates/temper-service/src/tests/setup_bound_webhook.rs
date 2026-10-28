@@ -76,7 +76,7 @@ fn a_port_zero_listener_is_priced_for_the_longest_assigned_port() {
     config.webhooks =
         Some(skein_forge_connection::hooks::Webhooks { listener: skein_io::Addr::Ip(([127, 0, 0, 1], 0).into()) });
     let (endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-    let ephemeral = worst_case(&config, &endpoints, 2).unwrap();
+    let ephemeral = worst_case(&config, &endpoints).unwrap();
     config.webhooks.as_mut().unwrap().listener = skein_io::Addr::Ip(([127, 0, 0, 1], u16::MAX).into());
-    assert_eq!(ephemeral, worst_case(&config, &endpoints, 2).unwrap());
+    assert_eq!(ephemeral, worst_case(&config, &endpoints).unwrap());
 }
