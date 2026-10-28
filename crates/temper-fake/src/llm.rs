@@ -193,7 +193,7 @@ fn models(d: &Json, at: u32, p: &Path) -> Result<Box<[Model]>, Refusal> {
             window: u32::try_from(window).expect("u32 bound"),
             output: u32::try_from(output).expect("u32 bound"),
         })
-        .expect("sixteen models");
+        .expect("eight models");
     }
     check_models(out.as_slice(), p, true)?;
     Ok(out.into_boxed())
@@ -201,7 +201,7 @@ fn models(d: &Json, at: u32, p: &Path) -> Result<Box<[Model]>, Refusal> {
 /// The same model bounds for the document and a deployment's derivation.
 /// The latter reports every model problem at its provider member.
 pub(crate) fn check_models(models: &[Model], p: &Path, indexed: bool) -> Result<(), Refusal> {
-    if models.len() > usize::try_from(crate::ENTRIES).expect("sixteen models") {
+    if models.len() > usize::try_from(crate::LIST_ENTRIES).expect("eight models") {
         return Err(read::why(p, b"past its bound"));
     }
     if models.is_empty() {
@@ -234,9 +234,9 @@ pub(crate) fn check_models(models: &[Model], p: &Path, indexed: bool) -> Result<
     Ok(())
 }
 fn counted_rules(scripts: &[api::Script]) -> InputRules {
-    let mut rules = List::with_capacity(u32::try_from(scripts.len()).expect("sixteen scripts"));
+    let mut rules = List::with_capacity(u32::try_from(scripts.len()).expect("eleven scripts"));
     for _ in scripts {
-        rules.push(Box::<[api::Rule]>::default()).expect("sixteen scripts");
+        rules.push(Box::<[api::Rule]>::default()).expect("eleven scripts");
     }
     rules.into_boxed()
 }
@@ -264,7 +264,7 @@ fn scripts_with_inputs(
     p: &Path,
     credentials: Option<u32>,
 ) -> Result<(Box<[api::Script]>, InputRules), Refusal> {
-    let items = read::list(d, at, 0, p)?;
+    let items = read::bounded_list(d, at, 0, crate::ENTRIES, p)?;
     let mut out = List::<api::Script>::with_capacity(items.len());
     let mut rules = List::with_capacity(items.len());
     for (i, at) in items.iter().enumerate() {
@@ -285,8 +285,8 @@ fn scripts_with_inputs(
             Some(at) => inputs(d, at, turns.len(), &p.member(b"inputs"))?,
             None => Box::new([]),
         };
-        rules.push(inputs).expect("sixteen scripts");
-        out.push(api::Script { cue, turns }).expect("sixteen scripts");
+        rules.push(inputs).expect("eleven scripts");
+        out.push(api::Script { cue, turns }).expect("eleven scripts");
     }
     Ok((out.into_boxed(), rules.into_boxed()))
 }
@@ -323,7 +323,7 @@ pub(crate) fn turns(d: &Json, at: u32, p: &Path) -> Result<Box<[api::Turn]>, Ref
     standalone_turns(d, at, p, None)
 }
 fn standalone_turns(d: &Json, at: u32, p: &Path, credentials: Option<u32>) -> Result<Box<[api::Turn]>, Refusal> {
-    let items = read::list(d, at, 1, p)?;
+    let items = read::bounded_list(d, at, 1, crate::SCRIPT_TURNS, p)?;
     let mut out = List::with_capacity(items.len());
     for (i, at) in items.iter().enumerate() {
         let turn = turn::Turn::read_standalone(d, *at, &read::index(p, i), credentials)?;
@@ -353,7 +353,7 @@ fn turns_hold(turns: &[api::Turn]) -> bool {
     }
     false
 }
-/// Live-domain limits: joint script bytes include all 33 scripts' wrappers.
+/// Live-domain limits: joint script bytes include all 23 scripts' wrappers.
 pub const LIMITS: domain::Config = domain::Config {
     calls: 8,
     query_bytes: 1 << 20,
@@ -370,7 +370,7 @@ pub const LIMITS: domain::Config = domain::Config {
     refused: 0,
     no_calls: 0,
     answer_tokens: 16_384,
-    calls_per_answer: crate::ENTRIES,
+    calls_per_answer: crate::LIST_ENTRIES,
     malformed: 0,
     outside_choice: 0,
     tool_rounds: 0,

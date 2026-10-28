@@ -10,13 +10,23 @@ pub const OTHER: u64 = 2;
 pub const HOOK_SECRET: &[u8] = b"real-loop-hook-secret";
 #[derive(Clone, Copy)]
 pub struct Fixture {
+    pub patience: Duration,
+    pub reply_gate: Option<(&'static str, usize)>,
     pub setup: fn() -> api::Setup,
+    pub configure_domain: fn(&mut domain::Config),
     pub extra_setups: fn() -> Box<[api::Setup]>,
     pub configure: fn(&mut serde_json::Value, &mut serde_json::Value, SocketAddr),
 }
 #[must_use]
 pub fn fixture() -> Fixture {
-    Fixture { setup, extra_setups: || Box::new([]), configure: |_, _, _| {} }
+    Fixture {
+        patience: crate::PATIENCE,
+        reply_gate: None,
+        setup,
+        configure_domain: |_| {},
+        extra_setups: || Box::new([]),
+        configure: |_, _, _| {},
+    }
 }
 fn setup() -> api::Setup {
     api::Setup {
@@ -131,14 +141,24 @@ impl Seen {
             let forge = handle.borrow();
             let branches: Box<[_]> =
                 forge.domain.branches(repository).iter().map(|(name, head)| (name.clone(), *head)).collect();
-            let api::Answer::Pulls(pulls) = forge
-                .domain
-                .inspect(&forge.config, repository, &api::Read::OpenPulls { page: 1, limit: 32 })
-                .expect("outside open-pulls read")
-            else {
-                panic!("open pulls")
-            };
-            let pulls: Box<[_]> = pulls.iter().map(|pull| pull.number).collect();
+            // The fake caps each page even when the reader requests 32 rows.
+            // Read every page so stories can assert the complete open-pull set.
+            let mut pulls = Vec::new();
+            for page in 1..=forge.config.limits.items + 1 {
+                let api::Answer::Pulls(rows) = forge
+                    .domain
+                    .inspect(&forge.config, repository, &api::Read::OpenPulls { page, limit: 32 })
+                    .expect("outside open-pulls read")
+                else {
+                    panic!("open pulls")
+                };
+                let count = rows.len();
+                pulls.extend(rows.iter().map(|pull| pull.number));
+                if count < forge.config.limits.page_size.min(32) as usize {
+                    break;
+                }
+            }
+            let pulls: Box<[_]> = pulls.into();
             if self.snapshots.last().is_none_or(|last| last.branches != branches || last.pulls != pulls) {
                 assert!(self.snapshots.len() < STORY_OBSERVATIONS as usize, "bounded forge snapshots");
                 self.snapshots.push(Snapshot { at: now, branches, pulls });
@@ -241,6 +261,7 @@ impl State {
             config.limits.contexts =
                 config.limits.contexts.max(u32::try_from(setup.checks.contexts.len()).expect("story check contexts"));
         }
+        (fixture.configure_domain)(&mut config);
         // Forgejo timestamps are wall times; this peer runs on the real monotonic clock.
         let now = skein_shell::Clock::new().now();
         config.skew = domain::Skew::Ahead(Duration::from_nanos(
