@@ -169,7 +169,6 @@ pub struct Service {
     requests: Queue<Request>,
     orders: Queue<Order>,
     order_walls: Queue<Wall>,
-    memory: u64,
 }
 impl Service {
     /// Checks the policy limits and adopts the binary's descriptors.
@@ -194,13 +193,7 @@ impl Service {
             .max(terminal::failure_bytes(&steps, &settings.data))
             .max(LINE_BYTES.checked_add(1).expect("URL LF"));
         let mut children = List::with_capacity(count);
-        let mut inputs = u64::try_from(settings.serve.len()).expect("serve name");
         for placed in &steps {
-            if let Some(label) = &placed.label {
-                inputs = inputs
-                    .checked_add(u64::try_from(label.len()).expect("label length"))
-                    .expect("bounded startup memory");
-            }
             let step = &placed.step;
             bounds.output = bounds.output.max(
                 LINE_BYTES
@@ -210,9 +203,7 @@ impl Service {
                     .expect("prefix"),
             );
             children.push(Child::new(&settings.serve, step, limits.tail_lines)).expect("one child per step");
-            inputs = inputs.checked_add(step_bytes(step)).expect("bounded startup memory");
         }
-        inputs = inputs.checked_add(inherited_bytes(&settings, count)).expect("bounded startup memory");
         let mut io = Io::new(&bounds);
         let signals = io.adopt_signals(settings.signals).expect("three adopted slots");
         let stdout = io.adopt_write_pipe(settings.stdout, None).expect("stdout slot");
@@ -225,7 +216,6 @@ impl Service {
             .max(64)
             .max(machine.max_out().checked_mul(2).expect("policy queue progress"));
         let entries = count.checked_mul(2).expect("terminal entries").checked_add(1).expect("terminal entries").max(3);
-        let memory = footprint(limits, &settings, &steps, &bounds, capacity, reply_entries, inputs);
         Ok(Self {
             io,
             env: Env { now: Time::ZERO, wall: Wall::EPOCH, limits: bounds },
@@ -259,7 +249,6 @@ impl Service {
             requests: Queue::with_capacity(capacity),
             orders: Queue::with_capacity(capacity),
             order_walls: Queue::with_capacity(capacity),
-            memory,
         })
     }
     fn room(&self, bound: io::MaxOut) -> bool {
@@ -1102,105 +1091,6 @@ fn policy_input_at(
     machine.input(now, input, orders);
     stamp_orders(orders, walls, wall);
 }
-/// All owned heap, including impossible simultaneous launch/chunk payloads.
-fn footprint(
-    limits: &Limits,
-    settings: &Settings,
-    steps: &[Placed],
-    bounds: &io::Limits,
-    capacity: u32,
-    reply_entries: u32,
-    inputs: u64,
-) -> u64 {
-    let count = u32::try_from(steps.len()).expect("bounded steps");
-    let entries = count.checked_mul(2).expect("terminal entries").checked_add(1).expect("terminal entries").max(3);
-    // Each queued record can own a launch or a chunk. Count even the impossible
-    // case where every slot holds the largest launch and the largest chunk.
-    let payload = inputs
-        .checked_add(u64::from(bounds.output))
-        .expect("bounded startup memory")
-        .checked_add(
-            u64::try_from(size_of::<kernel::Pipe>())
-                .expect("pipe spec")
-                .checked_mul(
-                    u64::try_from(settings.listeners.len())
-                        .expect("listener count")
-                        .checked_add(4)
-                        .expect("bounded startup memory"),
-                )
-                .expect("bounded startup memory"),
-        )
-        .expect("bounded startup memory");
-    let queues = Queue::<Complete>::worst_case(capacity)
-        .expect("completion queue")
-        .checked_add(Queue::<Submit>::worst_case(capacity).expect("submission queue"))
-        .expect("bounded startup memory")
-        .checked_add(Queue::<Event>::worst_case(capacity).expect("event queue"))
-        .expect("raw events")
-        .checked_add(Queue::<Told>::worst_case(capacity).expect("retained events"))
-        .expect("captured walls")
-        .checked_add(Queue::<Request>::worst_case(capacity).expect("request queue"))
-        .expect("bounded startup memory")
-        .checked_add(Queue::<Order>::worst_case(capacity).expect("order queue"))
-        .expect("bounded startup memory")
-        .checked_add(Queue::<Wall>::worst_case(capacity).expect("order source walls"))
-        .expect("bounded startup memory");
-    io::worst_case(bounds)
-        .expect("io memory")
-        .checked_add(crate::limits::worst_case(limits, count).expect("policy memory"))
-        .expect("bounded startup memory")
-        .checked_add(inputs.checked_mul(3).expect("bounded startup memory"))
-        .expect("bounded startup memory")
-        .checked_add(listener_memory(&settings.listeners))
-        .expect("bounded startup memory")
-        .checked_add(u64::from(count).checked_mul(64).expect("bounded startup memory"))
-        .expect("bounded startup memory")
-        .checked_add(queues)
-        .expect("bounded startup memory")
-        .checked_add(
-            payload.checked_mul(u64::from(capacity).checked_mul(5).expect("payload queues")).expect("queued payloads"),
-        )
-        .expect("bounded startup memory")
-        .checked_add(List::<Child>::worst_case(count).expect("child states"))
-        .expect("bounded startup memory")
-        .checked_add(List::<Placed>::worst_case(count).expect("step states"))
-        .expect("bounded startup memory")
-        .checked_add(
-            u64::from(count)
-                .checked_mul(u64::from(LINE_BYTES).checked_mul(4).expect("bounded startup memory"))
-                .expect("bounded startup memory"),
-        )
-        .expect("bounded startup memory")
-        .checked_add(Terminal::worst_case(entries, bounds.output).checked_mul(2).expect("terminal and deferred FIFO"))
-        .expect("terminal FIFO")
-        // Construction: extracted line plus the three block items can overlap
-        // assembly and the FIFO. Notices may also copy words to add a time.
-        .checked_add(u64::from(bounds.output).checked_mul(4).expect("formatter overlap"))
-        .expect("formatter memory")
-        .checked_add(List::<Item>::worst_case(6).expect("formatter item tables"))
-        .expect("formatter tables")
-        .checked_add(Sink::worst_case(reply_entries, limits.line_bytes))
-        .expect("bounded startup memory")
-        .checked_add(u64::from(limits.line_bytes).checked_mul(2).expect("bounded startup memory"))
-        .expect("bounded startup memory")
-        .checked_add(Logs::worst_case(steps, &settings.data))
-        .expect("logger memory")
-        .checked_add(Records::worst_case(count))
-        .expect("bounded startup memory")
-        .checked_add(tail_memory(limits, steps))
-        .expect("retained tails")
-        .checked_add(link_memory(steps))
-        .expect("bounded startup memory")
-        .checked_add(u64::from(count).checked_mul(Ready::worst_case()).expect("bounded startup memory"))
-        .expect("bounded startup memory")
-}
-fn listener_memory(held: &[(Fd, core::net::SocketAddr)]) -> u64 {
-    let count = u32::try_from(held.len()).expect("bounded listeners");
-    u64::try_from(size_of_val(held))
-        .expect("held listener slots")
-        .checked_add(List::<(core::net::SocketAddr, Token)>::worst_case(count).expect("listener tokens"))
-        .expect("bounded startup memory")
-}
 fn adopt_listeners(io: &mut Io, held: &[(Fd, core::net::SocketAddr)]) -> List<(core::net::SocketAddr, Token)> {
     let mut listeners = List::with_capacity(u32::try_from(held.len()).expect("bounded listeners"));
     for (fd, address) in held {
@@ -1251,72 +1141,6 @@ fn spawn_pipes(step: &Step, serve: &[u8], listeners: &[(core::net::SocketAddr, T
         pipes.push(kernel::Pipe { child: 0, way: kernel::Way::In, parent: None }).expect("link stdin");
     }
     pipes.into_boxed()
-}
-fn tail_memory(limits: &Limits, steps: &[Placed]) -> u64 {
-    let mut memory = 0_u64;
-    for step in steps {
-        memory = memory.checked_add(Tail::worst_case(limits.tail_lines, step.step.name().len())).expect("tail memory");
-    }
-    memory
-        .checked_add(u64::try_from(size_of::<Option<(Fact, Wall)>>()).expect("waiting failure state"))
-        .expect("failure memory")
-}
-fn link_memory(steps: &[Placed]) -> u64 {
-    let mut memory = 0_u64;
-    for step in steps {
-        if step.step.kind() == Kind::Link {
-            memory = memory
-                .checked_add(u64::from(LINE_BYTES))
-                .expect("bounded startup memory")
-                .checked_add(Sink::worst_case(1, LINE_BYTES))
-                .expect("bounded startup memory");
-        }
-    }
-    memory
-}
-fn step_bytes(step: &Step) -> u64 {
-    let mut bytes = u64::try_from(size_of_val(step.listeners())).expect("listener addresses");
-    for part in [step.name(), step.started_notice()] {
-        bytes = bytes.checked_add(u64::try_from(part.len()).expect("step bytes")).expect("bounded startup memory");
-    }
-    bytes = bytes
-        .checked_add(u64::try_from(size_of_val(step.arguments())).expect("argument slots"))
-        .expect("bounded startup memory");
-    for argument in step.arguments() {
-        bytes =
-            bytes.checked_add(u64::try_from(argument.len()).expect("argument length")).expect("bounded startup memory");
-    }
-    bytes
-}
-fn inherited_bytes(settings: &Settings, count: u32) -> u64 {
-    let mut inputs = 0_u64;
-    inputs = inputs
-        .checked_add(
-            u64::try_from(size_of_val(settings.environment.as_ref()))
-                .expect("environment slots")
-                .checked_mul(u64::from(count).checked_add(1).expect("bounded startup memory"))
-                .expect("bounded startup memory"),
-        )
-        .expect("bounded startup memory");
-    for value in &settings.environment {
-        inputs = inputs
-            .checked_add(
-                u64::try_from(value.len())
-                    .expect("environment length")
-                    .checked_mul(u64::from(count).checked_add(1).expect("bounded startup memory"))
-                    .expect("bounded startup memory"),
-            )
-            .expect("bounded startup memory");
-    }
-    inputs = inputs
-        .checked_add(
-            u64::try_from(settings.program.len())
-                .expect("program length")
-                .checked_mul(u64::from(count).checked_add(1).expect("bounded startup memory"))
-                .expect("bounded startup memory"),
-        )
-        .expect("bounded startup memory");
-    inputs
 }
 /// Up to four entities per step, three inherited streams and two serve control pipes.
 /// Names and the configured control line bound extend the byte limits at construction.
@@ -1583,9 +1407,6 @@ impl skein_shell::Host for Service {
             return None;
         }
         Some(Exit::Code(u8::from(self.failed || self.machine.outcome() != Some(Outcome::Stopped))))
-    }
-    fn worst_case(&self) -> u64 {
-        self.memory
     }
     fn operations(&self) -> u32 {
         io::operations(&self.env.limits).expect("io operations").checked_add(3).expect("root, records, logger")

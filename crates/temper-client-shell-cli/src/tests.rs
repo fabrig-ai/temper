@@ -181,14 +181,10 @@ fn memory_saves_are_stored_in_order_without_file_operations() {
     assert!(memory.request().is_none());
 }
 #[test]
-fn host_bounds_cover_its_holders() {
+fn host_operations_cover_its_io() {
     use skein_shell::Host;
     let f = fixtures::Engine::read(&["me"]);
     let limits = limits::native();
-    let holders = limits::transport(&limits).expect("native transport bound")
-        + jig_client::worst_case(&limits.root.domain.client).expect("native root bound")
-        + skein_io::worst_case(&limits.io).expect("native io bound");
-    assert!(f.host.worst_case() > holders);
     assert_eq!(f.host.operations(), skein_io::operations(&limits.io).expect("native operation bound") * 2 + 5);
 }
 #[test]
@@ -996,4 +992,12 @@ fn a_stopping_engine_ends_a_change_wait_at_the_link_deadline() {
     f.advance_past(limits::native().root.domain.client.domain.backoff.first);
     assert_eq!(f.exit(), Some(Exit::Code(1)));
     assert_eq!(f.stderr(), b"temper ctl: the engine at http://127.0.0.1:4000 did not answer within 30 s\n");
+}
+
+#[test]
+fn validity_accepts_stock_limits_and_refuses_invalid_edges() {
+    let mut limits = limits::native();
+    assert!(limits::valid(&limits));
+    limits.connections.body_bytes = u32::MAX; // Stream record + 512 overflows.
+    assert!(!limits::valid(&limits));
 }

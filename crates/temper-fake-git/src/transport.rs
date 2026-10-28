@@ -25,10 +25,6 @@ pub trait Transport: Remote {
     ) {
         unreachable!("a typed transport never misses a call");
     }
-    /// The command's retained log, cached objects and transient decoding buffers.
-    fn worst_case(&self) -> u64 {
-        0
-    }
 
     /// Allocate a lazy connection for a route transport; typed calls need none.
     fn connection(&self) -> Option<crate::connection::Connection> {

@@ -480,16 +480,6 @@ impl Host for Running {
     fn is_empty(&self) -> bool {
         self.result.is_some() && self.io.is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        skein_io::worst_case(&self.settings.io).expect("io memory fits")
-            + skein_http::client::worst_case(&self.settings.http).expect("http memory fits")
-            + skein_json::tokenizer::worst_case(&self.settings.documents.json).expect("json memory fits")
-            + Queue::<Complete>::worst_case(self.operations).expect("completions fit")
-            + Queue::<Submit>::worst_case(self.operations).expect("submissions fit")
-            + Queue::<skein_io::Event>::worst_case(self.events.capacity()).expect("events fit")
-            // Each row needs at least one input byte; retained text is bounded by the input too.
-            + u64::from(self.settings.documents.json.length).saturating_mul(u64::try_from(size_of::<skein_forge::forgejo::document::Row>()).expect("row size fits").saturating_add(1))
-    }
     fn operations(&self) -> u32 {
         self.operations
     }

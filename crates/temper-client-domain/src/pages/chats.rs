@@ -226,10 +226,6 @@ impl Chats {
         }
     }
 }
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    limits.client.domain.document_bytes.checked_mul(2)?.checked_add(u64::from(limits.client.domain.text))
-}
 
 fn handle(number: u64) -> Handle {
     Handle { asker: Owner::Pages.asker(), number }

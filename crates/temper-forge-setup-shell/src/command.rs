@@ -202,13 +202,6 @@ impl Host for Running {
     fn is_empty(&self) -> bool {
         self.spawn.is_none() && self.io.is_empty()
     }
-    fn worst_case(&self) -> u64 {
-        skein_io::worst_case(&self.limits).expect("io memory fits")
-            + u64::try_from(self.bound).expect("bound fits") * 2
-            + Queue::<Complete>::worst_case(self.operations).expect("completions fit")
-            + Queue::<Submit>::worst_case(self.operations).expect("submissions fit")
-            + Queue::<Event>::worst_case(self.events.capacity()).expect("events fit")
-    }
     fn operations(&self) -> u32 {
         self.operations
     }

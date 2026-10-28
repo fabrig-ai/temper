@@ -11,7 +11,6 @@ use crate::{
 use jig_client_shell_native::Shell;
 use skein_io::{
     self as io,
-    file_layer::FileIo,
     kernel::{Complete, Exit, Fd, Op, ServiceSignal, Submit},
 };
 use skein_lib::{
@@ -80,7 +79,6 @@ pub struct OneShot {
     told: Queue<io::Event>,
     status: Option<u8>,
     closed: bool,
-    memory: u64,
     move_file: Option<Box<[u8]>>,
     exporting: bool,
     file_end: Option<temper_client_tools::jig::FileEnd>,
@@ -111,24 +109,7 @@ impl OneShot {
         let output = Output::new(&mut io, startup.stdout, startup.stderr, limits.io.output);
         let stdin = Some(io.adopt_read_pipe(startup.stdin).expect("stdin slot"));
         let signals = Some(io.adopt_signals(startup.signals).expect("signal slot"));
-        let memory = io::worst_case(&limits.io).expect("io envelope")
-            + FileIo::worst_case(crate::directory::FILE_SLOTS, u32::try_from(limits.root.tools.ask_bytes).expect("call bound"), 1, u32::try_from(limits.root.tools.ask_bytes).expect("call bound")).expect("file envelope")
-            + Queue::<Complete>::worst_case(ROOM).expect("completions")
-            + Queue::<Submit>::worst_case(ROOM).expect("submissions") * 3
-            + Queue::<io::Event>::worst_case(ROOM).expect("io events")
-            + Queue::<io::file::Event>::worst_case(16).expect("file events")
-            + u64::from(limits.io.output) * 128
-            + limits::transport(&limits).expect("native envelope")
-            + FileIo::worst_case(4, limits.connections.body_bytes, 1, limits.connections.body_bytes).expect("native file envelope")
-            + u64::from(limits.connections.body_bytes) * 3 // Loaded store, credential and routing copies.
-            + jig_client::worst_case(&limits.root.domain.client).expect("client envelope") * 3 // Client, restored asks and diagnostic copies.
-            + Queue::<root::Request>::worst_case(request_room).expect("root outputs")
-            + Queue::<jig_client::Request>::worst_case(request_room).expect("ordered store writes")
-            + u64::from(request_room) * u64::from(limits.connections.body_bytes) // Queued store records.
-            + limits.root.tools.ask_bytes * 256 // Input and the JSON parser's per-byte token/document scratch.
-            + u64::from(limits.root.tools.rows) * (u64::from(temper_client_tools::limits::MOVED_BYTES) + u64::try_from(size_of::<Option<skein_lib::Secret>>()).expect("secret holder"))
-            + 2 * (u64::from(temper_client_tools::limits::MOVED_BYTES) + 2) // Key or moved-record file buffer and its bounded read.
-            + 8192; // Output lines and DIRECTORY's bounded path.
+        assert!(limits::valid(&limits), "native transport limits are checked");
         let (exporting, move_file) = match &call.parsed {
             Parsed::Call { call, .. }
                 if call.tool == temper_client_tools::jig::rows::EXPORT_AT
@@ -186,7 +167,6 @@ impl OneShot {
             told: Queue::with_capacity(ROOM),
             status: None,
             closed: false,
-            memory,
         };
         host.prepare_start();
         Ok(host)
@@ -836,9 +816,6 @@ impl Host for OneShot {
     }
     fn exit(&self) -> Option<Exit> {
         self.is_empty().then(|| Exit::Code(self.status.expect("terminal status")))
-    }
-    fn worst_case(&self) -> u64 {
-        self.memory
     }
     fn operations(&self) -> u32 {
         io::operations(&self.env.limits).expect("io operations") * 2 + 5

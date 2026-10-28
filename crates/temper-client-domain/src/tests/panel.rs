@@ -619,12 +619,10 @@ fn a_late_tell_from_the_previous_subject_changes_nothing() {
     assert_eq!(root.forge().panel().unwrap().state, State::Shown(Box::new(p::panel(NEXT, w::Step::Producing))));
 }
 #[test]
-fn output_and_memory_bounds_cover_replacement_and_a_full_panel() {
+fn output_bounds_cover_replacement_and_a_full_panel() {
     const PANEL_REPLACEMENT_REQUESTS: u32 = 2; // Unwatch followed by watch.
     // A full decoded change panel, a quarter above 10-28's 5,408 bytes.
     const PANEL_HEAP_CEILING: u64 = 6_800;
-    // The forge side's total heap, a quarter above 10-28's 12,581,504 bytes.
-    const FORGE_HEAP_CEILING: u64 = 16_000_000;
     let limits = f::limits();
     let mut side = forge::Side::new(&limits.forge, f::SEED);
     let mut out = Queue::with_capacity(forge::max_out(&limits.forge));
@@ -660,6 +658,4 @@ fn output_and_memory_bounds_cover_replacement_and_a_full_panel() {
     let panel_heap =
         u64::try_from(size_of::<w::ChangePanel>()).unwrap() + w::ChangePanel::worst_case_heap(&wire).unwrap();
     assert!(panel_heap <= PANEL_HEAP_CEILING);
-    assert!(forge::worst_case(&limits.forge).unwrap() <= FORGE_HEAP_CEILING);
-    assert!(crate::worst_case(&limits).unwrap() >= forge::worst_case(&limits.forge).unwrap());
 }

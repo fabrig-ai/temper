@@ -191,7 +191,4 @@ impl Ready {
     pub(crate) fn settled(&self) -> bool {
         !self.active && self.owner.is_none()
     }
-    pub(crate) fn worst_case() -> u64 {
-        List::<u8>::worst_case(STATUS_BYTES).expect("status memory")
-    }
 }

@@ -7,9 +7,6 @@ impl Waiting {
     pub(crate) fn new(capacity: u32) -> Self {
         Self { lines: Queue::with_capacity(capacity) }
     }
-    pub(crate) fn capacity(&self) -> u32 {
-        self.lines.capacity()
-    }
     pub(crate) fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }

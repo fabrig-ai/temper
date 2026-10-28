@@ -1,6 +1,6 @@
 //! The terminal's loop over a client, with time supplied by its host.
 use crate::limits;
-use skein_lib::{Duration, Queue, Secret, Time};
+use skein_lib::{Duration, Secret, Time};
 use skein_ui::{Act, NodeId, Tree};
 use skein_ui_text::Command;
 pub(crate) mod native;
@@ -39,7 +39,6 @@ pub enum Notice {
 pub struct Loop {
     pub terminal: skein_ui_text::Terminal,
     limits: limits::Terminal,
-    terminal_memory: u64,
     terminal_operations: u32,
     directory: Box<[u8]>,
     link: Option<Secret>,
@@ -68,15 +67,12 @@ impl Loop {
             line_bytes: u32::try_from(directory.len().checked_add(160).expect("line bytes fit"))
                 .expect("line bytes fit"),
         };
-        let terminal_memory =
-            skein_ui_text::Terminal::worst_case(&settings, view_limits).expect("terminal memory fits");
         let terminal_operations =
             skein_ui_text::Terminal::operations(&settings, view_limits).expect("terminal operations fit");
         let terminal = skein_ui_text::Terminal::new(settings, view_limits).expect("terminal settings");
         Self {
             terminal,
             limits: *limits,
-            terminal_memory,
             terminal_operations,
             directory,
             link,
@@ -213,18 +209,6 @@ impl Loop {
     #[must_use]
     pub fn exit(&self) -> Option<(u8, Option<Box<[u8]>>)> {
         self.terminal.closed().then(|| (u8::from(self.failure.is_some()), self.failure.clone()))
-    }
-    /// temper's waiting notices, directory, link and failure line.
-    #[must_use]
-    pub fn worst_case(&self) -> Option<u64> {
-        let line = u64::try_from(self.directory.len().checked_add(160)?).ok()?;
-        let failure = line.max(temper_client_domain::sign_in::full_line_bound("temper open")?);
-        let waiting = self.lines.capacity();
-        Queue::<Box<[u8]>>::worst_case(waiting)?
-            .checked_add(line.checked_mul(u64::from(waiting))?)?
-            .checked_add(u64::try_from(self.directory.len()).ok()?)?
-            .checked_add(failure)?
-            .checked_add(u64::try_from(self.link.as_ref().map_or(0, |link| link.expose().len())).ok()?)
     }
 }
 fn join(parts: &[&[u8]]) -> Box<[u8]> {

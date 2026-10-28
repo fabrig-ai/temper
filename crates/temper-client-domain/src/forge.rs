@@ -335,33 +335,6 @@ pub const fn max_out(_limits: &Limits) -> u32 {
     // One completed project per retained picker, plus the shown page's read.
     forges::ROWS.checked_add(4).expect("forge output fits")
 }
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    if limits.field_bytes < 7 {
-        return None;
-    }
-    let wire = wire_limits(limits)?;
-    u64::from(limits.field_bytes)
-        .checked_mul(6)?
-        .checked_add(u64::from(limits.checks).checked_mul(4)?)?
-        .checked_add(forges::worst_case(limits)?)?
-        .checked_add(picker::worst_case(*limits)?)?
-        .checked_add(4097 + 2048)?
-        .checked_add(4090)?
-        // Restored PEM bytes and the generated secret coexist with the encoded
-        // carried output, which the root's output queue already prices.
-        .checked_add(u64::try_from(forges::PASTED_PAYLOAD).ok()?.checked_mul(2)?)?
-        .checked_add(u64::from(limits.field_bytes).checked_mul(3)?)?
-        .checked_add(u64::from(limits.field_bytes.max(wire.first_repository_label)))?
-        .checked_add(temper_client_protocol_wire::v1::Answer::worst_case_heap(&wire)?)?
-        .checked_add(u64::from(limits.field_bytes))?
-        .checked_add(temper_client_protocol_wire::v1::Answer::worst_case_heap(&wire)?)?
-        .checked_add(temper_client_protocol_wire::v1::DemoAnswer::worst_case_heap(&wire)?)?
-        .checked_add(u64::from(wire.group_failed_why))?
-        .checked_add(u64::try_from(size_of::<jig_client::Handle>()).ok()?)?
-        .checked_add(u64::try_from(size_of::<temper_client_protocol_wire::v1::ChangePanel>()).ok()?)?
-        .checked_add(temper_client_protocol_wire::v1::ChangePanel::worst_case_heap(&wire)?)
-}
 
 fn served(side: &mut Side, served: Served) {
     side.served = served;

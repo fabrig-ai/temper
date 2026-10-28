@@ -254,18 +254,6 @@ impl Tail {
         writer.put(b"\n").expect("log LF");
         item.bytes = writer.finish();
     }
-    pub fn worst_case(lines: u32, name: usize) -> u64 {
-        let bytes = u64::try_from(name)
-            .expect("step name")
-            .checked_add(u64::from(crate::host::LINE_BYTES))
-            .expect("piece")
-            .checked_add(3)
-            .expect("prefix and LF");
-        skein_lib::Queue::<Box<[u8]>>::worst_case(lines)
-            .expect("tail table")
-            .checked_add(bytes.checked_mul(u64::from(lines)).expect("tail pieces"))
-            .expect("tail memory")
-    }
 }
 /// Only failures of an actual step's exit or readiness carry a tail.
 pub(crate) fn tail_step(fact: Fact) -> Option<usize> {

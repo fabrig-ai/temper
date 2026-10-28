@@ -150,3 +150,11 @@ fn budget_hold_words_name_the_task_and_explain_the_available_actions() {
     let text = book.say(0, jig_client::words::Word::hold(&reason).id(), number.as_slice()).unwrap().text;
     assert_eq!(text.as_ref(), b"Insufficient activation budget. A release alone holds it again: give task 73 more budget by deciding its budget proposal, then release it; or cancel it.");
 }
+
+#[test]
+fn validity_accepts_stock_limits_and_refuses_invalid_edges() {
+    let mut limits = fixtures::limits();
+    assert!(crate::valid(&limits));
+    limits.forge.field_bytes = 6; // Seven bytes are needed for the forge form.
+    assert!(!crate::valid(&limits));
+}

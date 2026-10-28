@@ -1072,27 +1072,3 @@ fn hold_revision(page: Option<&c::ReadValue>) -> Option<u64> {
 fn latest(client: &Client, handle: Handle) -> Option<&Latest> {
     client.document(handle)?.latest
 }
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    // Activity, the final task, the last outcome, and bounded held-task cards and their words.
-    // Three more document bounds cover the draft base (spec, authority, instructions,
-    // dependencies and model), its replacement spec, and its retained outcome.
-    // The editor also keeps one bounded specification field and its inline state.
-    // A goal or procedure also keeps one page of ended delegates and its read state.
-    // An agent's task also retains a chat's thread and its borrowed view lines.
-    limits
-        .client
-        .domain
-        .document_bytes
-        .checked_mul(u64::from(limits.client.domain.reads).checked_add(7)?)?
-        .checked_add(List::<Card>::worst_case(limits.client.domain.reads)?)?
-        .checked_add(List::<(Key, Sending)>::worst_case(4)?)?
-        .checked_add(u64::try_from(size_of::<Amending>()).ok()?)?
-        .checked_add(u64::try_from(size_of::<Ended>()).ok()?)?
-        .checked_add(u64::from(limits.client.domain.text).checked_mul(2)?)?
-        .checked_add(u64::from(limits.client.domain.reads).checked_mul(u64::from(limits.client.domain.text))?)?
-        .checked_add(jig_client::thread::worst_case(&super::chat::thread_limits(limits))?)?
-        .checked_add(List::<jig_client::thread::Line<'_>>::worst_case(
-            limits.client.domain.rows.checked_mul(4)?.checked_add(1)?,
-        )?)
-}

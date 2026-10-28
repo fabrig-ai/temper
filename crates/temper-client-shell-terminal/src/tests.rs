@@ -55,21 +55,9 @@ fn a_table_record_saved_then_kept_comes_back_the_same() {
     }
 }
 #[test]
-fn the_native_limits_pass_each_worst_case() {
+fn the_native_limits_cover_wire_and_transport() {
     let limits = limits::native();
     assert_eq!(limits.client.client.domain.authority, 14);
-    let (view, forge) = limits::view(&limits).expect("usable view");
-    let root = client::worst_case(&limits.client).expect("usable root");
-    let view = temper_client_view::worst_case(&view, &limits.client, &forge).expect("usable view");
-    let shell = jig_client_shell_native::Shell::new(jig_client_shell_native::Settings {
-        engine: skein_io::Addr::Ip("127.0.0.1:7100".parse().expect("loopback")),
-        directory: Box::from(*b"client"),
-        limits: limits.connections,
-        io: limits.io,
-    });
-    assert_eq!(limits::shell(&limits), Some(shell.worst_case()), "checked shell formula");
-    assert_eq!(limits::worst_case(&limits), Some(root + view + shell.worst_case()), "sum of all owners");
-    assert!(skein_io::worst_case(&limits.io).is_some(), "usable io");
     let wire = client::forge::wire_limits(&limits.client.forge).expect("client wire bounds");
     let demo = temper_client_protocol_wire::v1::DemoAnswer::worst_case_bytes(&wire).expect("demo bound");
     assert!(demo <= limits.client.client.domain.document_bytes, "family read answer fits");
@@ -104,7 +92,6 @@ fn the_native_limits_make_the_terminal() {
         lines: bounds.lines,
         line_bytes: 166,
     };
-    assert!(skein_ui_text::Terminal::worst_case(&settings, &view.tree).is_some(), "native terminal memory fits");
     assert!(skein_ui_text::Terminal::operations(&settings, &view.tree).is_some(), "native terminal operations fit");
     assert!(skein_ui_text::Terminal::new(settings, &view.tree).is_some(), "native terminal settings fit");
 }
@@ -116,4 +103,12 @@ fn a_kept_credential_signs_in_held_with_no_exchange() {
     link.step(Time::ZERO, link::Event::SignIn { with: link::With::Held(fixtures::credential()) }, &mut out);
     assert_eq!(link.credential(), Some(&fixtures::credential()));
     assert!(out.is_empty(), "a held credential sends no sign-in exchange");
+}
+
+#[test]
+fn validity_accepts_stock_limits_and_refuses_invalid_edges() {
+    let mut limits = limits::native();
+    assert!(limits::valid(&limits));
+    limits.connections.body_bytes = u32::MAX; // Stream record + 512 overflows.
+    assert!(!limits::valid(&limits));
 }

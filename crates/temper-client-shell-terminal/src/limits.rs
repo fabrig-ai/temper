@@ -1,4 +1,4 @@
-//! Documented native-client constants and checked memory sums (client/README.md, 2).
+//! Documented native-client constants and checked edge bounds (client/README.md, 2).
 #![deny(
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
@@ -116,14 +116,29 @@ pub fn view(limits: &Limits) -> Option<(temper_client_view::Limits, temper_clien
     let view = temper_client_view::Limits::of(&limits.client, &words)?;
     Some((view, words))
 }
-/// Sum the root, view, link and shell, with overflow refusing the preset.
+/// Refuses unusable client/view limits, overflowing transport counts and incompatible io bounds.
 #[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    let (view, words) = view(limits)?;
-    let root = client::worst_case(&limits.client)?;
-    let view = temper_client_view::worst_case(&view, &limits.client, &words)?;
-    root.checked_add(view)?.checked_add(shell(limits)?)
+pub fn valid(limits: &Limits) -> bool {
+    if limits.connections.exchanges != EXCHANGES
+        || limits.io.intake < limits.connections.http.head.max(limits.connections.http.read)
+        || limits.io.output < limits.connections.http.request.max(limits.connections.http.send)
+    {
+        return false;
+    }
+    let Some(heard) = limits.connections.http.read.checked_mul(3) else { return false };
+    let Some(record) = limits.connections.body_bytes.checked_add(512) else { return false };
+    client::valid(&limits.client) && view(limits).is_some()
+        // jig's valid() replaces this at the set's repin
+        && jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
+            record, chunk: limits.connections.http.read,
+        }).is_some()
+        && heard.checked_add(8).is_some()
+        && limits.io.sockets.checked_mul(64).is_some()
+        && limits.io.is_usable()
+        // skein's valid() replaces this at the set's repin
+        && skein_io::worst_case(&limits.io).is_some()
 }
+/// Compatibility export for temper/tests/support/case/project.rs until its caller goes.
 /// The published `Shell::worst_case` formula, with every operation checked.
 #[must_use]
 pub fn shell(limits: &Limits) -> Option<u64> {

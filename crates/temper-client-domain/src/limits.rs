@@ -1,7 +1,6 @@
 //! The pages and forge share jig's receiving and request bounds.
-use crate::{Request, forge};
-use alloc::boxed::Box;
-use skein_lib::Queue;
+use crate::forge;
+use temper_client_protocol_wire::v1 as w;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     pub forge: forge::Limits,
@@ -24,28 +23,23 @@ pub fn max_out(limits: &Limits) -> u32 {
         .checked_add(1)
         .expect("welcome output bound fits")
 }
+
+/// Refuses unusable client limits, unrepresentable page counts and forge wire bounds.
 #[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    let mut total = crate::pages::task::worst_case(limits)?;
-    total = total.checked_add(u64::from(crate::authorize::QUERY_BYTES))?;
-    total = total.checked_add(u64::try_from(size_of::<crate::authorize::Authorization>()).ok()?)?;
-    total = total.checked_add(crate::pages::choice::worst_case(limits)?)?;
-    total = total.checked_add(crate::pages::accounts::worst_case(limits)?)?;
-    total = total
-        .checked_add(u64::try_from(size_of::<crate::pages::connect_model::ConnectModel>()).ok()?)?
-        .checked_add(u64::try_from(crate::pages::accounts::KEY_BYTES).ok()?)?
-        .checked_add(limits.client.domain.document_bytes)?
-        .checked_add(32)?;
-    total = total.checked_add(crate::pages::inbox::worst_case(limits)?)?;
-    total = total.checked_add(crate::pages::chats::worst_case(limits)?)?;
-    total = total.checked_add(crate::pages::chat::worst_case(limits)?)?;
-    total = total.checked_add(Queue::<crate::pages::Request>::worst_case(crate::pages::max_out(limits))?)?;
-    total = total.checked_add(forge::worst_case(&limits.forge)?)?;
-    total = total.checked_add(limits.client.domain.document_bytes)?;
-    total = total.checked_add(jig_client::worst_case(&limits.client)?)?;
-    total = total.checked_add(Queue::<forge::Request>::worst_case(forge::max_out(&limits.forge))?)?;
-    total = total.checked_add(u64::from(max_out(limits)).checked_mul(limits.client.domain.document_bytes)?)?;
-    total = total.checked_add(limits.client.domain.document_bytes)?;
-    total = total.checked_add(u64::try_from(size_of::<Option<(jig_client::Key, Box<[u8]>)>>()).ok()?)?;
-    total.checked_add(Queue::<Request>::worst_case(max_out(limits))?)
+pub fn valid(limits: &Limits) -> bool {
+    // jig's valid() replaces this at the set's repin
+    if jig_client::worst_case(&limits.client).is_none() || limits.forge.field_bytes < 7 {
+        return false;
+    }
+    let Some(wire) = forge::wire_limits(&limits.forge) else { return false };
+    let Some(lines) = limits.client.domain.rows.checked_mul(4) else { return false };
+    let Ok(document) = u32::try_from(limits.client.domain.document_bytes) else { return false };
+    lines.checked_add(1).is_some()
+        && limits.client.domain.rows.checked_mul(3).is_some()
+        && document.checked_add(1).is_some()
+        && w::Answer::worst_case_heap(&wire).is_some()
+        && w::DemoAnswer::worst_case_heap(&wire).is_some()
+        && w::ChangePanel::worst_case_heap(&wire).is_some()
+        && w::Page::worst_case_heap(&wire).is_some()
+        && w::Forges::worst_case_heap(&wire).is_some()
 }

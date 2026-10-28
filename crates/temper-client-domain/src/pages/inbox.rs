@@ -281,19 +281,6 @@ pub const fn kind(kind: Kind) -> InboxGroup {
 pub fn max_out(limits: &Limits) -> u32 {
     limits.client.domain.reads.checked_mul(2).expect("pages output fits").checked_add(8).expect("pages output fits")
 }
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    List::<Card>::worst_case(limits.client.domain.reads)?.checked_mul(2)?.checked_add(
-        u64::from(limits.client.domain.reads).checked_mul(
-            limits
-                .client
-                .domain
-                .document_bytes
-                .checked_mul(2)?
-                .checked_add(u64::from(limits.client.domain.text).checked_mul(2)?)?,
-        )?,
-    )
-}
 
 fn handle(number: u64) -> Handle {
     Handle { asker: Owner::Pages.asker(), number }

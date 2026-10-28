@@ -255,8 +255,3 @@ pub(crate) fn act(pages: &mut Pages, client: &Client, act: Act, out: &mut Queue<
         pages.choice.edit(me, act);
     }
 }
-#[must_use]
-pub fn worst_case(limits: &crate::Limits) -> Option<u64> {
-    // Three document bounds: original choice, editable choice and retained amendment outcome.
-    limits.client.domain.document_bytes.checked_mul(3)?.checked_add(u64::try_from(size_of::<Draft>()).ok()?)
-}

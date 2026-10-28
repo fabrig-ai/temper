@@ -1,4 +1,4 @@
-//! Checked envelope for temper's frame, cards, transcript and tree.
+//! Checked edge bounds for temper's frame, cards, transcript and tree.
 use crate::words::{Word, Words};
 use alloc::boxed::Box;
 use skein_ui::phrases::Hole;
@@ -167,8 +167,7 @@ impl Limits {
             markdown_depth: 3,
         };
         let limits = Limits { tree };
-        worst_case(&limits, domain, words)?;
-        Some(limits)
+        valid(&limits, domain, words).then_some(limits)
     }
 }
 fn card_nodes(receiving: &jig_client::DomainLimits, markdown: u32) -> Option<u32> {
@@ -194,64 +193,14 @@ fn fold_bytes(receiving: &jig_client::DomainLimits, words: &Words) -> Option<u32
     let extra = u32::try_from(separator.len().checked_add(repeated.len())?).ok()?;
     receiving.turn_text.checked_add(u32::try_from(count.len()).ok()?)?.checked_add(receiving.rows.checked_mul(extra)?)
 }
+
+/// Refuses unrepresentable UI limits, account row counts and phrase capacity.
 #[must_use]
-pub fn worst_case(limits: &Limits, domain: &temper_client_domain::Limits, words: &Words) -> Option<u64> {
-    let mut total = 0_u64;
-    for (_, bytes) in memory_terms(limits, domain, words)? {
-        total = total.checked_add(bytes)?;
-    }
-    Some(total)
-}
-/// Tree, page scratch, bindings and words at the view's composition boundary.
-#[must_use]
-fn memory_terms(
-    limits: &Limits,
-    domain: &temper_client_domain::Limits,
-    words: &Words,
-) -> Option<[(&'static str, u64); 10]> {
-    let pages = u64::from(domain.client.domain.text)
-        .checked_add(skein_lib::List::<u64>::worst_case(domain.client.domain.rows)?)?
-        // Plan ordering: task/parent input, sorted task index, child/sibling links,
-        // deferred siblings and the resulting depth-first row indices.
-        .checked_add(skein_lib::List::<(u64, Option<u64>)>::worst_case(domain.client.domain.rows)?)?
-        .checked_add(skein_lib::List::<(u64, u32)>::worst_case(domain.client.domain.rows)?)?
-        .checked_add(skein_lib::List::<(u32, u32)>::worst_case(domain.client.domain.rows)?)?
-        .checked_add(skein_lib::List::<u32>::worst_case(domain.client.domain.rows)?.checked_mul(2)?)?
-        .checked_add(
-            skein_lib::List::<u64>::worst_case(temper_client_domain::pages::delegation::bound(domain))?
-                .checked_mul(2)?,
-        )?;
-    let accounts = skein_lib::List::<temper_client_domain::pages::accounts::Way>::worst_case(
-        domain.client.domain.rows.checked_mul(3)?,
-    )?
-    .checked_add(u64::from(limits.tree.text_per_node).checked_mul(4)?)?;
-    let fold = skein_lib::List::<Box<[u8]>>::worst_case(domain.client.domain.rows)?
-        .checked_add(u64::from(limits.tree.text_per_node).checked_mul(2)?)?;
-    Some([
-        ("ui", skein_ui::worst_case(&limits.tree)?.checked_add(u64::try_from(size_of::<Option<u64>>()).ok()?)?),
-        ("pages", pages),
-        ("forge.bindings", crate::forge::bindings::worst_case(limits.tree.bindings)?),
-        (
-            "forge.sign_in",
-            skein_lib::List::<crate::forge_sign_in::Forge>::worst_case(crate::forge_sign_in::FORGES)?
-                .checked_add(u64::from(crate::forge_sign_in::FORGES).checked_mul(1280)?)?,
-        ),
-        ("frame", crate::frame::Bindings::worst_case(limits.tree.bindings)?),
-        (
-            "accounts.bindings",
-            crate::accounts::Bindings::worst_case(crate::accounts::binding_capacity(
-                &domain.accounts,
-                domain.client.domain.rows,
-            ))?,
-        ),
-        (
-            "choice",
-            skein_lib::List::<temper_client_domain::Choice>::worst_case(
-                temper_client_domain::forge::forges::ROWS.checked_add(1)?,
-            )?,
-        ),
-        ("pages.accounts", accounts),
-        ("pages.chat", fold),
-        ("words", skein_ui::phrases::worst_case(words.book.limits())?.checked_add(u64::from(words.capacity()?))?),
-    ])
+pub fn valid(limits: &Limits, domain: &temper_client_domain::Limits, words: &Words) -> bool {
+    // skein's valid() replaces this at the set's repin
+    skein_ui::worst_case(&limits.tree).is_some()
+        // skein's valid() replaces this at the set's repin
+        && skein_ui::phrases::worst_case(words.book.limits()).is_some()
+        && words.capacity().is_some()
+        && domain.client.domain.rows.checked_mul(3).is_some()
 }

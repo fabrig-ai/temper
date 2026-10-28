@@ -69,9 +69,6 @@ impl Bindings {
         }
         None
     }
-    pub fn worst_case(capacity: u32) -> Option<u64> {
-        List::<(Token, Act)>::worst_case(capacity)
-    }
 }
 fn text(builder: &mut Builder, role: Role, words: &[u8], style: Option<skein_ui::Style>) {
     builder.open(role);

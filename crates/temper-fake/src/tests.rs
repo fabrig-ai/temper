@@ -568,7 +568,6 @@ fn constants_fit() {
     let document = llm::Document::decode(&bytes).expect("valid fixture");
     let key = credential(0, credential::KEY);
     let plain = crate::wire::llm(llm::configuration(&document, &key[..], 0), false).expect("valid fixture");
-    assert!(skein_fake_llm_domain::worst_case(&llm::LIMITS).is_some());
     let mut tls: Value = serde_json::from_slice(&bytes).expect("valid fixture");
     tls["tls"] = json!({"root":"/tmp/root"});
     let document = llm::Document::decode(&serde_json::to_vec(&tls).expect("valid fixture")).expect("valid fixture");
@@ -587,7 +586,6 @@ fn constants_fit() {
     assert_eq!(issued.secret.expose(), &token);
     assert_eq!(issued.scopes.as_ref(), &[Box::<[u8]>::from(b"all".as_slice())]);
     assert!(skein_fake_forge_protocol::git::fits(&crate::wire::forge_limits(), &forge::LIMITS.limits));
-    assert!(skein_fake_forge_domain::worst_case(&forge::LIMITS.limits).is_some());
     assert!(plain.observations().is_empty());
     assert!(peer.observations().is_empty());
 }

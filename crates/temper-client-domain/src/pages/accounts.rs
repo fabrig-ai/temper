@@ -116,12 +116,3 @@ pub fn current_me(client: &Client) -> Option<&c::Me> {
     }
     if let Latest::Jig(c::Delivery::Me(me)) = doc.latest? { Some(me) } else { None }
 }
-#[must_use]
-pub fn worst_case(limits: &crate::Limits) -> Option<u64> {
-    u64::try_from(size_of::<Accounts>())
-        .ok()?
-        .checked_add(u64::try_from(KEY_BYTES).ok()?)?
-        .checked_add(limits.client.domain.document_bytes)?
-        .checked_add(32)?
-        .checked_add(skein_lib::List::<Way>::worst_case(limits.client.domain.rows.checked_mul(3)?)?)
-}

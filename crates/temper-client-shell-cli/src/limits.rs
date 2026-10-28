@@ -56,32 +56,27 @@ pub fn native() -> Limits {
     }
 }
 
-/// The shared transport and its wrapper queues, beside the native shell's io.
+/// Refuses unusable HTTP/io limits, overflowing stream counts and incompatible transport bounds.
 #[must_use]
-pub fn transport(limits: &Limits) -> Option<u64> {
+pub fn valid(limits: &Limits) -> bool {
     if limits.connections.exchanges != EXCHANGES
         || limits.connections.body_bytes == 0
         || limits.connections.deadline == Duration::ZERO
+        || limits.io.intake < limits.connections.http.head.max(limits.connections.http.read)
+        || limits.io.output < limits.connections.http.request.max(limits.connections.http.send)
     {
-        return None;
+        return false;
     }
-    if limits.io.intake < limits.connections.http.head.max(limits.connections.http.read) {
-        return None;
-    }
-    if limits.io.output < limits.connections.http.request.max(limits.connections.http.send) {
-        return None;
-    }
-    // Keep the checked stream bounds before constructing the transport's queues.
-    skein_http::client::worst_case(&limits.connections.http)?;
-    jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
-        record: limits.connections.body_bytes.checked_add(512)?,
-        chunk: limits.connections.http.read,
-    })?;
-    limits.connections.http.read.checked_mul(3)?.checked_add(8)?;
-    let io = skein_io::worst_case(&limits.io)?;
-    let transport = crate::transport::Memory::new(
-        skein_io::Addr::Ip((std::net::Ipv4Addr::LOCALHOST, 0).into()),
-        &limits.connections,
-    );
-    io.checked_add(transport.worst_case(&limits.io))
+    let Some(heard) = limits.connections.http.read.checked_mul(3) else { return false };
+    let Some(record) = limits.connections.body_bytes.checked_add(512) else { return false };
+    // skein's valid() replaces this at the set's repin
+    skein_http::client::worst_case(&limits.connections.http).is_some()
+        // jig's valid() replaces this at the set's repin
+        && jig_client_protocol_http::worst_case(&jig_client_protocol_http::Limits {
+            record, chunk: limits.connections.http.read,
+        }).is_some()
+        && heard.checked_add(8).is_some()
+        && limits.io.is_usable()
+        // skein's valid() replaces this at the set's repin
+        && skein_io::worst_case(&limits.io).is_some()
 }

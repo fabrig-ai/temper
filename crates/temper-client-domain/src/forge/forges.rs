@@ -612,23 +612,6 @@ fn end(side: &mut super::Side, out: &mut skein_lib::Queue<super::Request>) {
         out.push(super::Request::Client { asked: jig_client::Event::Unwatch { handle: handle() } });
     }
 }
-#[must_use]
-pub fn worst_case(limits: &super::Limits) -> Option<u64> {
-    let wire = wire_limits(limits)?;
-    let rows = u64::from(temper_client_protocol_wire::FORGES);
-    w::Forges::worst_case_heap(&wire)?
-        .checked_mul(2)?
-        .checked_add(rows.checked_mul(u64::try_from(size_of::<Row>()).ok()?)?)?
-        // Three draft fields, three sent fields, two adoption names, main and temper/.
-        .checked_add(u64::from(limits.field_bytes).checked_mul(8)?)?
-        .checked_add(11)?
-        // MakeProject retains a name, an adoption, and jig's bounded refusal.
-        .checked_add(u64::from(limits.field_bytes).checked_mul(5)?)?
-        .checked_add(65_536)?
-        .checked_add(skein_lib::List::<(u16, u64)>::worst_case(ROWS)?)?
-        .checked_add(u64::try_from(size_of::<SetUp>()).ok()?)?
-        .checked_add(w::Answer::worst_case_heap(&wire)?)
-}
 
 // The first repository is adopted on the forge side, even away from the flow
 // (protocol/setup.md, 6.7), after jig has made its project.

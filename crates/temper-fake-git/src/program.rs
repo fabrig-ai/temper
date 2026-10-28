@@ -507,11 +507,6 @@ impl<T: Transport> Host for Git<T> {
     fn exit(&self) -> Option<Exit> {
         self.is_empty().then(|| Exit::Code(self.answer.as_ref().expect("answered invocation").exit))
     }
-    fn worst_case(&self) -> u64 {
-        128 * 1024 * 1024
-            + self.transport.worst_case()
-            + self.connection.as_ref().map_or(0, crate::connection::Connection::worst_case)
-    }
     fn operations(&self) -> u32 {
         1
     }

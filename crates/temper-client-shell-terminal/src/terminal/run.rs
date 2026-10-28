@@ -20,7 +20,6 @@ pub struct Terminal {
     submit: Queue<Submit>,
     raw: Queue<Submit>,
     told: Queue<io::Event>,
-    memory: u64,
     operations: u32,
 }
 impl Terminal {
@@ -49,17 +48,6 @@ impl Terminal {
             .and_then(|n| n.checked_add(terminal.terminal_operations))
             .expect("combined operations");
         let room = operations.checked_mul(2).expect("completion and submission room");
-        let memory = client
-            .worst_case()
-            .checked_add(terminal.worst_case().expect("terminal envelope"))
-            .and_then(|n| n.checked_add(terminal.terminal_memory))
-            .and_then(|n| n.checked_add(io::worst_case(&limits)?))
-            .and_then(|n| n.checked_add(Queue::<Complete>::worst_case(room)?))
-            .and_then(|n| n.checked_add(Queue::<Submit>::worst_case(room)?))
-            .and_then(|n| n.checked_add(Queue::<Submit>::worst_case(ROOM)?))
-            .and_then(|n| n.checked_add(Queue::<io::Event>::worst_case(ROOM)?))
-            .and_then(|n| n.checked_add(u64::from(limits.intake).checked_mul(2)?))
-            .expect("terminal memory fits");
         Ok(Self {
             client,
             state: terminal,
@@ -70,7 +58,6 @@ impl Terminal {
             submit: Queue::with_capacity(room),
             raw: Queue::with_capacity(ROOM),
             told: Queue::with_capacity(ROOM),
-            memory,
             operations,
         })
     }
@@ -222,9 +209,6 @@ impl Host for Terminal {
     }
     fn exit(&self) -> Option<Exit> {
         self.is_empty().then(|| Exit::Code(self.state.exit().expect("drained loop").0))
-    }
-    fn worst_case(&self) -> u64 {
-        self.memory
     }
     fn operations(&self) -> u32 {
         self.operations

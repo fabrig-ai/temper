@@ -17,10 +17,6 @@ fn the_tools_preset_is_the_terminals_but_its_rows() {
     assert_eq!(limits::client(), terminal);
 }
 #[test]
-fn the_tools_preset_has_a_worst_case() {
-    assert!(temper_client_domain::worst_case(&limits::client()).is_some(), "the tools preset is priced");
-}
-#[test]
 fn the_rows_repeats_are_within_the_client_limits() {
     use crate::jig::table::Occurs;
     let limits = limits::client();

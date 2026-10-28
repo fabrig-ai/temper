@@ -238,12 +238,9 @@ impl App for Temper {
     fn patch_limit(view: &Self::View) -> u32 {
         Self::view_limits(view).patches
     }
-    fn worst_case(limits: &Self::Limits) -> u64 {
-        let presentation = fixtures::domain_limits();
-        let forge = fixtures::phrasebooks(&presentation);
-        let bounds = fixtures::view_bounds(&presentation, &forge);
-        domain::worst_case(limits).expect("root bound")
-            + 2 * view::worst_case(&bounds, &presentation, &forge).expect("shell model projection bound")
+    fn worst_case(_limits: &Self::Limits) -> u64 {
+        // No bound of temper's: the harness's heap_bytes_per_client bounds a client (programming-model.md 6.3); jig's provided method replaces this at the set's repin.
+        u64::MAX
     }
     fn window_changed(event: &Event) -> bool {
         match event.root() {

@@ -50,9 +50,4 @@ impl Memory {
     pub(crate) fn is_empty(&self) -> bool {
         self.transport.is_empty() && self.events.is_empty() && self.requests.is_empty()
     }
-    pub(crate) fn worst_case(&self, limits: &io::Limits) -> u64 {
-        self.transport.worst_case(limits)
-            + Queue::<client::Event>::worst_case(self.events.capacity()).expect("memory events")
-            + Queue::<io::Request>::worst_case(self.requests.capacity()).expect("memory requests")
-    }
 }

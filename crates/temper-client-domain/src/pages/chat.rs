@@ -717,32 +717,6 @@ pub fn thread_limits(limits: &Limits) -> jig_client::thread::Limits {
         text: limits.client.domain.text,
     }
 }
-#[must_use]
-pub fn worst_case(limits: &Limits) -> Option<u64> {
-    jig_client::thread::worst_case(&thread_limits(limits))?
-        .checked_add(u64::try_from(size_of::<Option<c::ReadNone>>()).ok()?)?
-        // The latest run state, boxed off the root's pages, keeps no writing; its call owns three bounded texts.
-        .checked_add(u64::try_from(size_of::<c::RunState>()).ok()?)?
-        .checked_add(u64::from(limits.client.domain.text).checked_mul(3)?)?
-        .checked_add(List::<(Key, Sending)>::worst_case(4)?)?
-        .checked_add(u64::from(limits.client.domain.text))?
-        .checked_add(limits.client.domain.document_bytes)?
-        // Refresh can briefly retain old cards beside their replacements.
-        .checked_add(super::inbox::worst_case(limits)?)?
-        .checked_add(List::<c::ObjectKey>::worst_case(limits.client.domain.reads)?)?
-        // Refresh moves final documents, retaining only the old and new list slots.
-        .checked_add(List::<delegation::Delegation>::worst_case(delegation::bound(limits))?.checked_mul(2)?)?
-        .checked_add(u64::from(delegation::bound(limits)).checked_mul(limits.client.domain.document_bytes)?)?
-        .checked_add(List::<u64>::worst_case(delegation::bound(limits))?.checked_mul(3)?)?
-        .checked_add(List::<jig_client::thread::Line<'_>>::worst_case(LINES.checked_mul(4)?.checked_add(1)?)?)?
-        // A received task's delegate list is bounded by its document bytes.
-        .checked_add(List::<c::Operation>::worst_case(
-            u32::try_from(limits.client.domain.document_bytes).ok()?.checked_add(1)?,
-        )?)?
-        .checked_add(
-            u64::from(u32::try_from(limits.client.domain.document_bytes).ok()?.checked_add(1)?).checked_mul(11)?,
-        )
-}
 pub(crate) fn page_task(page: Readout, task: u64) -> Option<Box<c::Task>> {
     match page {
         Readout::Jig(c::ReadResult::Value(c::ReadValue::Task(task))) => Some(task),

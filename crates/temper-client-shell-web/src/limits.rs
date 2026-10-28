@@ -87,22 +87,11 @@ pub fn view(client: &client::Limits) -> Option<(temper_client_view::Limits, temp
 pub fn stream() -> Option<jig_client_protocol_http::Limits> {
     Some(jig_client_protocol_http::Limits { record: BODY_BYTES.checked_add(512)?, chunk: PIECE })
 }
-/// Sum the root, view, stream and the exchanges' bodies, with overflow refusing the bounds.
+
+/// Refuses unusable client, view or HTTP stream decoder bounds.
 #[must_use]
-pub fn worst_case(client: &client::Limits) -> Option<u64> {
-    let mut total = 0_u64;
-    for (_, bytes) in memory_terms(client)? {
-        total = total.checked_add(bytes)?;
-    }
-    Some(total)
-}
-/// The page's root, view, stream decoder and concurrent exchange bodies.
-#[must_use]
-fn memory_terms(client: &client::Limits) -> Option<[(&'static str, u64); 4]> {
-    let (bounds, words) = view(client)?;
-    let root = client::worst_case(client)?;
-    let view = temper_client_view::worst_case(&bounds, client, &words)?;
-    let stream = jig_client_protocol_http::worst_case(&stream()?)?;
-    let bodies = u64::from(EXCHANGES.checked_add(1)?).checked_mul(u64::from(BODY_BYTES))?;
-    Some([("domain", root), ("view", view), ("http", stream), ("host", bodies)])
+pub fn valid(client: &client::Limits) -> bool {
+    let Some(stream) = stream() else { return false };
+    // jig's valid() replaces this at the set's repin
+    client::valid(client) && view(client).is_some() && jig_client_protocol_http::worst_case(&stream).is_some()
 }

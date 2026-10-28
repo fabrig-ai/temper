@@ -187,13 +187,6 @@ impl Records {
         self.phase = Phase::Idle;
         self.answer = Some(Input::NotWritten { forge });
     }
-    pub fn worst_case(steps: u32) -> u64 {
-        List::<u16>::worst_case(steps)
-            .expect("group ids")
-            .saturating_mul(2)
-            .saturating_add(256)
-            .saturating_add(u64::try_from(size_of::<Self>()).expect("record state"))
-    }
 }
 fn path(forge: u16) -> Box<[u8]> {
     joined(&[b"box/started/", Decimal::of(u64::from(forge)).as_bytes()])

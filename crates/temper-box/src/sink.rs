@@ -167,12 +167,6 @@ impl Terminal {
         }
         true
     }
-    pub(crate) fn worst_case(entries: u32, bytes: u32) -> u64 {
-        Queue::<Item>::worst_case(entries)
-            .expect("terminal queue")
-            .checked_add(u64::from(entries).checked_mul(u64::from(bytes)).expect("terminal payloads"))
-            .expect("terminal memory")
-    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
@@ -273,11 +267,6 @@ impl Sink {
     #[must_use]
     pub fn drained(&self) -> bool {
         self.phase == Phase::Idle && self.queued.is_empty() && !self.dirty
-    }
-    pub(crate) fn worst_case(entries: u32, bytes: u32) -> u64 {
-        Queue::<Box<[u8]>>::worst_case(entries)
-            .expect("sink queue")
-            .saturating_add(u64::from(entries).saturating_mul(u64::from(bytes)))
     }
     #[must_use]
     pub fn pending(&self) -> bool {

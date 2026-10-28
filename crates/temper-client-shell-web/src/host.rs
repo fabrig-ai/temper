@@ -60,7 +60,7 @@ impl Host {
     #[must_use]
     pub fn new(seed: u64, now: Time, wall: Wall, ways: view::sign_in::Ways) -> Self {
         let client = limits::client();
-        assert!(limits::worst_case(&client).is_some(), "web capacities are checked");
+        assert!(limits::valid(&client), "web capacities are checked");
         let (bounds, words) = limits::view(&client).expect("web view capacities are checked");
         Self {
             root: root::new_departing(&client, seed),

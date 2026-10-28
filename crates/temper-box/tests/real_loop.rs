@@ -95,9 +95,6 @@ impl Host for Proc {
     fn exit(&self) -> Option<Exit> {
         self.host().exit()
     }
-    fn worst_case(&self) -> u64 {
-        self.host().worst_case()
-    }
     fn operations(&self) -> u32 {
         self.host().operations()
     }
@@ -252,28 +249,6 @@ impl Host for Synthetic {
     }
     fn exit(&self) -> Option<Exit> {
         if self.is_empty() { Some(Exit::Code(0)) } else { None }
-    }
-    fn worst_case(&self) -> u64 {
-        // Unchecked world; nevertheless count queues and their fixed buffers.
-        let queues = Queue::<Complete>::worst_case(QUEUE_ENTRIES)
-            .expect("completion storage")
-            .checked_add(Queue::<Submit>::worst_case(QUEUE_ENTRIES).expect("submission storage"))
-            .expect("queue storage");
-        // Capture plus at most one fixed read/write buffer per operation and
-        // eight descriptor slots. The remaining host fields live inline.
-        let buffers = CAPTURE_BYTES
-            .checked_add(
-                READ_BYTES.checked_mul(usize::try_from(OPERATIONS).expect("operation count")).expect("fixed buffers"),
-            )
-            .expect("capture and buffers");
-        let descriptors = size_of::<Fd>()
-            .checked_mul(usize::try_from(OPERATIONS).expect("descriptor count"))
-            .expect("descriptor storage");
-        queues
-            .checked_add(
-                u64::try_from(buffers.checked_add(descriptors).expect("synthetic storage")).expect("storage fits u64"),
-            )
-            .expect("host storage")
     }
     fn operations(&self) -> u32 {
         OPERATIONS

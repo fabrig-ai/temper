@@ -16,7 +16,6 @@ fn the_small_profile_has_the_values_of_the_plan() {
         }
     );
     assert_eq!(limits::check(&limits::small()), Ok(()));
-    assert!(limits::worst_case(&limits::small(), 6).expect("fits") > 0, "state is priced");
 }
 #[test]
 fn a_backoff_above_its_maximum_names_both_limits() {

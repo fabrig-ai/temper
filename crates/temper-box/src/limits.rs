@@ -1,5 +1,5 @@
 //! Restart and shutdown bounds (protocol/configuration.md, 7).
-use skein_lib::{Duration, Queue, Time};
+use skein_lib::Duration;
 /// The box limits, durations in milliseconds at configuration boundaries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Limits {
@@ -118,13 +118,4 @@ pub fn check(limits: &Limits) -> Result<(), Unfit> {
         return Err(Unfit::TailLines);
     }
     Ok(())
-}
-/// Machine state, exit history and two timer slots per step.
-#[must_use]
-pub fn worst_case(limits: &Limits, steps: u32) -> Option<u64> {
-    let state = u64::try_from(size_of::<crate::machine::State>()).ok()?;
-    let history = Queue::<Time>::worst_case(limits.restarts.checked_add(1)?)?;
-    let timers = u64::try_from(size_of::<Option<Time>>()).ok()?.checked_mul(2)?;
-    let groups = u64::try_from(size_of::<crate::machine::GroupState>()).ok()?;
-    state.checked_add(groups)?.checked_add(history)?.checked_add(timers)?.checked_mul(u64::from(steps))
 }

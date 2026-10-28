@@ -1,6 +1,6 @@
 //! Private bounded diagnostic logs (protocol/setup.md, 7.2). One owned kernel
 //! operation at a time; a retained piece gates further diagnostic reads.
-use crate::{host::LINE_BYTES, layout::Placed, lines::joined};
+use crate::{layout::Placed, lines::joined};
 use alloc::boxed::Box;
 use skein_io::kernel::{self, Complete, Done, Entry, Error, Fd, Kind, Op, OpenHow, Submit};
 use skein_lib::{Decimal, List, Queue, Token, Wall, bytes};
@@ -411,31 +411,6 @@ impl Logs {
         ]));
         self.entry = None;
         self.phase = Phase::Cleanup;
-    }
-    pub fn worst_case(steps: &[Placed], data: &[u8]) -> u64 {
-        let count = u32::try_from(steps.len()).expect("bounded steps");
-        let mut names = 0_u64;
-        for step in steps {
-            names = names
-                .checked_add(u64::try_from(step.step.name().len()).expect("name size").checked_add(4).expect("suffix"))
-                .expect("log names");
-        }
-        let path = u64::try_from(data.len())
-            .expect("data path")
-            .checked_add(names)
-            .expect("log paths")
-            .checked_add(256)
-            .expect("notice words");
-        List::<Log>::worst_case(count)
-            .expect("log table")
-            .checked_add(path.checked_mul(4).expect("paths and notices"))
-            .expect("logger memory")
-            .checked_add(u64::from(LINE_BYTES).checked_mul(3).expect("piece, record, echo"))
-            .expect("logger payloads")
-            .checked_add(u64::try_from(kernel::LONGEST_NAME).expect("directory names"))
-            .expect("logger listing")
-            .checked_add(u64::try_from(size_of::<Self>()).expect("logger state"))
-            .expect("logger memory")
     }
     pub fn max_notice(steps: &[Placed], data: &[u8]) -> u32 {
         let mut longest = 0;

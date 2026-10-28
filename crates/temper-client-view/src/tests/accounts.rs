@@ -689,22 +689,7 @@ fn only_settled_account_statuses_have_the_done_style() {
 #[cfg(target_pointer_width = "64")]
 #[path = "../../../../testing/memory_literal.rs"]
 mod memory_literal;
-// The client view's worst case at the account fixture's bounds, with a quarter's headroom.
-#[cfg(target_pointer_width = "64")]
-const VIEW_CEILING: u64 = 24_000_000_000;
 
-#[test]
-#[cfg(target_pointer_width = "64")]
-fn the_view_stays_under_its_ceiling() {
-    let domain = fixtures::limits();
-    let words = fixtures::words();
-    let bounds = crate::Limits::of(&domain, &words).unwrap();
-    let actual = crate::worst_case(&bounds, &domain, &words).expect("priced fixture");
-    assert!(
-        actual <= VIEW_CEILING,
-        "view worst case {actual} passes ceiling {VIEW_CEILING}; a ceiling moves by hand in the commit of a real change that passes it, which says why"
-    );
-}
 fn owner_root() -> (d::Domain, Token) {
     let (root, deployment, _) = owner_root_with_accounts();
     (root, deployment)

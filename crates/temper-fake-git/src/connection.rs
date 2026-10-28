@@ -290,15 +290,6 @@ impl Connection {
     pub fn is_closed(&self) -> bool {
         matches!(self.state, State::Closed)
     }
-    /// HTTP buffers, socket intake, queued upload and a bounded whole response.
-    #[must_use]
-    pub fn worst_case(&self) -> u64 {
-        http::worst_case(&self.limits).expect("admitted client limits")
-            + Intake::worst_case(http::largest_read(&self.limits)).expect("admitted intake")
-            + u64::from(self.body_limit) * 2
-            + Queue::<http::Event>::worst_case(8).expect("event queue")
-            + Queue::<Down>::worst_case(8).expect("stream queue")
-    }
 }
 
 #[cfg(test)]

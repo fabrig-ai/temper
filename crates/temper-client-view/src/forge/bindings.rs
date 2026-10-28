@@ -143,10 +143,6 @@ fn check(values: &mut List<u32>, text: &[u8]) -> Option<()> {
     }
     values.push(value).ok()
 }
-#[must_use]
-pub fn worst_case(capacity: u32) -> Option<u64> {
-    List::<Entry>::worst_case(capacity)
-}
 
 /// Move secret input straight into the forge event, outside clonable actions.
 #[must_use]

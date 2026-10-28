@@ -65,7 +65,6 @@ pub struct NativeClient {
     signing: Queue<Signing>,
     saving_signing: Option<Signing>,
     seen: Seen,
-    memory: u64,
     loaded: bool,
 }
 impl NativeClient {
@@ -105,21 +104,9 @@ impl NativeClient {
         make_root: fn(&domain::Limits, u64) -> domain::Domain,
     ) -> Result<Self, jig_client_protocol_http::Unlinked> {
         let bounds = settings.limits;
-        let mut memory = limits::worst_case(&bounds).expect("native capacities are checked");
+        assert!(limits::valid(&bounds), "native capacities are checked");
         let (view_limits, forge_words) = limits::view(&bounds).expect("native view capacities are checked");
         let notices = domain::max_out(&bounds.client);
-        memory = memory
-            .checked_add(Queue::<Shown>::worst_case(notices).expect("notice memory"))
-            .and_then(|n| n.checked_add(Queue::<Signing>::worst_case(limits::EXCHANGES)?))
-            .and_then(|n| n.checked_add(skein_lib::Map::<skein_lib::Token, bool>::worst_case(limits::EXCHANGES)?))
-            .expect("native queues fit memory");
-        memory = memory
-            .checked_add(
-                skein_lib::Set::<jig_client::Key>::worst_case(bounds.client.client.domain.requests.requests)
-                    .expect("kept key slots"),
-            )
-            .and_then(|n| n.checked_add(bounds.client.client.domain.document_bytes))
-            .expect("notice memory fits");
         let mut shell = Shell::new(jig_client_shell_native::Settings {
             engine: settings.engine,
             directory: settings.directory,
@@ -151,7 +138,6 @@ impl NativeClient {
             signing: Queue::with_capacity(limits::EXCHANGES),
             saving_signing: None,
             seen: Seen::default(),
-            memory,
             loaded: false,
         })
     }
@@ -521,9 +507,6 @@ impl Host for NativeClient {
     }
     fn is_empty(&self) -> bool {
         matches!(self.phase, Phase::Closing { .. }) && self.shell.is_empty()
-    }
-    fn worst_case(&self) -> u64 {
-        self.memory
     }
     fn operations(&self) -> u32 {
         self.shell.operations()

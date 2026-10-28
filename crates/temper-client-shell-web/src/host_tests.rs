@@ -271,20 +271,6 @@ fn a_stale_filter_link_opens_less_filtered_at_its_printed_address() {
     assert_eq!(host.show, Some((Box::from(b"/?project=3".as_slice()), true)));
 }
 
-// The web preset's worst case, with a quarter's headroom.
-#[cfg(target_pointer_width = "64")]
-const WEB_CEILING: u64 = 420_000_000_000;
-
-#[test]
-#[cfg(target_pointer_width = "64")]
-fn the_web_preset_stays_under_its_ceiling() {
-    let actual = limits::worst_case(&limits::client()).expect("priced web preset");
-    assert!(
-        actual <= WEB_CEILING,
-        "web worst case {actual} passes ceiling {WEB_CEILING}; a ceiling moves by hand in the commit of a real change that passes it, which says why"
-    );
-}
-
 #[test]
 fn the_web_preset_sends_a_whole_suggested_request() {
     assert!(limits::client().client.domain.text >= temper_client_protocol_wire::CUE_BYTES);
@@ -504,4 +490,12 @@ fn the_github_rows_external_web_link_has_its_address_and_noopener() {
             assert!(anchor.contains("target=\"_blank\""), "{anchor}");
         }
     }
+}
+
+#[test]
+fn validity_accepts_stock_limits_and_refuses_invalid_edges() {
+    let mut client = limits::client();
+    assert!(limits::valid(&client));
+    client.forge.field_bytes = 6; // The client refuses a field too small for its form.
+    assert!(!limits::valid(&client));
 }

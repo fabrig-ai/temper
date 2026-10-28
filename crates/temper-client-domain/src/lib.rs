@@ -24,6 +24,6 @@ pub mod words;
 pub use address::{Address, ChatsFilter, Choice, ModelWay, Place, PlanFilter, Step, WayKind};
 pub use boundary::{Action, Event, Fact, Request};
 pub use domain::{Domain, fire, new, new_departing, next_deadline, shown, step, take, unlinked, unlinked_departing};
-pub use limits::{Limits, max_out, worst_case};
+pub use limits::{Limits, max_out, valid};
 #[cfg(test)]
 mod tests;

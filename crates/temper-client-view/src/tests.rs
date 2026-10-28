@@ -119,3 +119,14 @@ mod welcome;
 mod flow;
 
 mod connect_forge;
+
+#[test]
+fn validity_accepts_stock_limits_and_refuses_invalid_edges() {
+    let mut domain = fixtures::limits();
+    let words = fixtures::words();
+    let limits = crate::Limits::of(&domain, &words).unwrap();
+    assert!(crate::valid(&limits, &domain, &words));
+    domain.client.domain.rows = u32::MAX; // Checked account/node row counts overflow.
+    assert!(!crate::valid(&limits, &domain, &words));
+    assert!(crate::Limits::of(&domain, &words).is_none());
+}

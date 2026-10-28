@@ -47,7 +47,7 @@ impl View {
         sign_in: crate::sign_in::Ways,
     ) -> View {
         assert!(forge_words.connector == forge, "phrasebook belongs to its forge connector");
-        assert!(crate::worst_case(limits, domain, &forge_words).is_some(), "view capacities are checked");
+        assert!(crate::valid(limits, domain, &forge_words), "view capacities are checked");
         View {
             sign_in,
             forge_sign_in: crate::forge_sign_in::Forges::new(),

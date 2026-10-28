@@ -412,15 +412,3 @@ pub(crate) fn adopted(side: &mut Side, request: Token, answer: &super::Answer) -
     }
     false
 }
-pub(crate) fn worst_case(limits: Limits) -> Option<u64> {
-    let bounds = super::wire_limits(&limits)?;
-    skein_lib::List::<Picker>::worst_case(forges::ROWS)?.checked_add(
-        u64::from(forges::ROWS).checked_mul(
-            w::Page::worst_case_heap(&bounds)?
-                .checked_add(w::Answer::worst_case_heap(&bounds)?)?
-                .checked_add(w::Forges::worst_case_heap(&bounds)?)?
-                .checked_add(u64::from(limits.field_bytes).checked_mul(6)?)?
-                .checked_add(65_536)?,
-        )?,
-    )
-}

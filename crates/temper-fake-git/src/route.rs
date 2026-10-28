@@ -6,7 +6,7 @@ use skein_fake_forge_protocol::{
     Limits,
     git::{self, Answer, Call, client},
 };
-use skein_lib::{List, Map, Time};
+use skein_lib::Time;
 use std::{cell::RefCell, collections::BTreeMap};
 
 /// A command cannot make more than this many runs, including its final run.
@@ -231,38 +231,6 @@ impl Transport for Route {
     fn receive(&mut self, call: Call, answer: Result<Answer, api::Error>, authenticated: bool) {
         Self::receive(self, call, answer, authenticated);
     }
-    /// Cached objects and parents, logged calls and answers, the missing call,
-    /// and one decode in flight. One answer arrives per run, so `MAX_RUNS` bounds
-    /// retained answers even when later objects replace earlier cache entries.
-    fn worst_case(&self) -> u64 {
-        worst_case(&self.limits).expect("admitted route limits")
-    }
-}
-fn worst_case(limits: &Limits) -> Option<u64> {
-    let body = limits.documents.body_bytes.min(limits.documents.json.length);
-    let inner = limits.documents.inner;
-    let runs = u64::from(MAX_RUNS);
-    let entries = MAX_RUNS.checked_mul(inner)?;
-    // Each answer has at most inner objects, each with inner files. Their
-    // payloads together fit in one body; even an empty file costs a wire byte.
-    let files = u32::try_from(u64::from(body).min(u64::from(inner).checked_mul(u64::from(inner))?)).ok()?;
-    let objects = Map::<u64, git::Object>::worst_case(entries)?
-        .checked_add(runs.checked_mul(List::<api::File>::worst_case(files)?.checked_add(u64::from(body))?)?)?;
-    let parents = Map::<u64, git::Parents>::worst_case(entries)?;
-    // write::tree's smallest entry is {"path":"","content":""} (24 bytes).
-    // Admission bounds all byte payloads by body, regardless of inner or
-    // string_bytes. Objects calls here hold one u64, also covered by body.
-    let call = List::<api::File>::worst_case(body / 24)?.checked_add(u64::from(body))?;
-    // Objects answers enter the maps, never the log. Only Cloned owns heap
-    // among the remaining answers; Result and Error are inline in Logged.
-    let strings = u64::from(inner).checked_add(1)?.checked_mul(u64::from(limits.documents.string_bytes))?;
-    let answer = List::<api::Head>::worst_case(inner)?.checked_add(u64::from(body).min(strings))?;
-    // Vec growth never exceeds MAX_RUNS slots: the run bound is a power of two.
-    let log = List::<Logged>::worst_case(MAX_RUNS)?.checked_add(runs.checked_mul(call.checked_add(answer)?)?)?;
-    let missing = call;
-    let decode = git::decoder_worst_case(limits)?;
-    let tokenizer = skein_json::tokenizer::worst_case(&limits.documents.json)?;
-    objects.checked_add(parents)?.checked_add(log)?.checked_add(missing)?.checked_add(decode)?.checked_add(tokenizer)
 }
 fn files(tree: Tree) -> Box<[api::File]> {
     tree.into_iter().map(|(path, content)| api::File { path: path.into(), content: content.into() }).collect()

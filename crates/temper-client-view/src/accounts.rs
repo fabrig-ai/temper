@@ -85,9 +85,6 @@ impl Bindings {
         }
         None
     }
-    pub fn worst_case(capacity: u32) -> Option<u64> {
-        List::<(Token, Meaning)>::worst_case(capacity)?.checked_add(u64::try_from(size_of::<Self>()).ok()?)
-    }
 }
 /// Each of two account lists has source actions, state actions, ranks and one editor.
 pub(crate) fn binding_capacity(counts: &temper_client_domain::limits::AccountLimits, providers: u32) -> u32 {
