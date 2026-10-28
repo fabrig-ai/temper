@@ -105,6 +105,7 @@ pub(super) fn decode_job_attempt(value: w::JobAttempt) -> d::JobAttempt {
     d::JobAttempt { head, run, job, attempt }
 }
 #[expect(clippy::manual_map, reason = "step translations use explicit matches without closures")]
+#[expect(clippy::too_many_lines, reason = "the store translation exhaustively lists forge answers and their payloads")]
 pub(super) fn encode(value: &d::Answer) -> w::Answer {
     match value {
         d::Answer::Located { repository } => {
