@@ -451,6 +451,7 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
         review_charter,
         result,
         effect_account,
+        producer_failure,
     } = value;
     w::ChangeRow::new(
         &w::CEILINGS,
@@ -499,6 +500,7 @@ pub(super) fn encode_change_row(value: &top::ChangeRow) -> w::ChangeRow {
             queue_repairs: *queue_repairs,
             producing_charter: *producing_charter,
             review_charter: *review_charter,
+            producer_failure: producer_failure.clone(),
             effect_account: match effect_account {
                 Some(account) => Some(
                     w::EffectAccount::new(
@@ -540,6 +542,7 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         review_charter,
         result,
         effect_account,
+        producer_failure,
     } = value.into_parts();
     top::ChangeRow {
         result: decode_result(result),
@@ -580,6 +583,7 @@ pub(super) fn decode_change_row(value: w::ChangeRow) -> top::ChangeRow {
         queue_repairs,
         producing_charter,
         review_charter,
+        producer_failure,
         effect_account: match effect_account {
             Some(account) => {
                 let w::EffectAccountParts { entry, words } = account.into_parts();

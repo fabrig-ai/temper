@@ -445,6 +445,10 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
                 Some(account) => bytes(&account.words)?,
                 None => 0,
             })?
+            .checked_add(match &row.producer_failure {
+                Some(words) => bytes(words)?,
+                None => 0,
+            })?
             .checked_add(state(&row.change.state, 0)?),
         Stored::Issue(row) => {
             let before = match &row.before {
