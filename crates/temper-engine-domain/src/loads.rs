@@ -132,8 +132,10 @@ pub enum Request {
         after: Option<Key>,
         /// Positive row demand, no larger than `Limits::rows`.
         most: u32,
-        /// Hard decoded-page bytes, equal to `Limits::reply_bytes`.
-        bytes: u32,
+        /// Hard decoded-page bytes: the read allowance or computed cold-row capacity.
+        bytes: u64,
+        /// A cold page uses its whole computed allowance without read-prefix cuts.
+        restoring: bool,
     },
     /// One successful terminal to the root waiter, unless abandoned.
     Loaded {
@@ -161,6 +163,7 @@ struct Entry {
     after: Option<Key>,
     most: u32,
     phase: Phase,
+    restoring: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -177,6 +180,7 @@ enum Phase {
 pub struct Loads {
     limits: Limits,
     entries: Slab<Entry>,
+    restore_bytes: u64,
 }
 
 impl Loads {
@@ -185,7 +189,16 @@ impl Loads {
     #[must_use]
     pub fn new(limits: &Limits) -> Loads {
         assert!(worst_case(limits).is_some(), "valid root load limits");
-        Loads { limits: *limits, entries: Slab::with_capacity(limits.loads) }
+        Loads { limits: *limits, entries: Slab::with_capacity(limits.loads), restore_bytes: 0 }
+    }
+
+    /// Configure the separately priced startup workspace before admitting loads.
+    #[must_use]
+    pub fn with_restore(limits: &Limits, bytes: u64) -> Loads {
+        assert!(bytes >= u64::from(limits.reply_bytes), "cold workspace holds a read page");
+        let mut loads = Self::new(limits);
+        loads.restore_bytes = bytes;
+        loads
     }
 
     /// Pure shell idle query: no issued page awaits its terminal or reclaim. Abandoned IO remains
@@ -209,12 +222,30 @@ pub fn begin(
     most: u32,
     out: &mut Queue<Request>,
 ) -> Option<Token> {
+    admit(domain, Entry { waiter, range, after, most, phase: Phase::Waiting, restoring: false }, out)
+}
+
+/// Admit a cold page with the store's computed workspace, preserving the same
+/// ownership, range, order and cursor checks as a read (jig's store.md, 7.1).
+pub fn begin_restore(
+    domain: &mut Loads,
+    waiter: Token,
+    range: Range,
+    after: Option<Key>,
+    most: u32,
+    out: &mut Queue<Request>,
+) -> Option<Token> {
+    admit(domain, Entry { waiter, range, after, most, phase: Phase::Waiting, restoring: true }, out)
+}
+
+fn admit(domain: &mut Loads, entry: Entry, out: &mut Queue<Request>) -> Option<Token> {
     assert!(out.room() >= 1, "one root load output reserved");
-    if most == 0 || most > domain.limits.rows || !valid_range(&range) {
+    let Entry { ref range, ref after, most, restoring, .. } = entry;
+    if most == 0 || most > domain.limits.rows || !valid_range(range) {
         return None;
     }
-    if let Some(key) = &after {
-        match &range {
+    if let Some(key) = after {
+        match range {
             Range::Census(census) => {
                 census_position(census, key)?;
             }
@@ -225,10 +256,12 @@ pub fn begin(
             }
         }
     }
-    let entry = Entry { waiter, range: range.clone(), after: after.clone(), most, phase: Phase::Waiting };
+    let range = range.clone();
+    let after = after.clone();
+    let bytes = if restoring { domain.restore_bytes } else { u64::from(domain.limits.reply_bytes) };
     let id = domain.entries.insert(entry).ok()?;
     let owner = id.token();
-    out.push(Request::Load { owner, range, after, most, bytes: domain.limits.reply_bytes });
+    out.push(Request::Load { owner, range, after, most, bytes, restoring });
     Some(owner)
 }
 
@@ -280,7 +313,7 @@ pub fn loaded(domain: &mut Loads, owner: Token, rows: Box<[Record]>, next: Optio
         Phase::Closed => return,
         Phase::Waiting => {}
     }
-    let checked = check(entry, &domain.limits, &rows, next.clone());
+    let checked = check(entry, &domain.limits, domain.restore_bytes, &rows, next.clone());
     let waiter = entry.waiter;
     entry.phase = Phase::Closed;
     domain.entries.retire(id);
@@ -317,7 +350,16 @@ struct Page {
     cut: Option<Cut>,
 }
 
-fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> Result<Page, Failure> {
+fn check(
+    entry: &Entry,
+    limits: &Limits,
+    restore_bytes: u64,
+    rows: &[Record],
+    next: Option<Key>,
+) -> Result<Page, Failure> {
+    let hard = if entry.restoring { restore_bytes } else { u64::from(limits.reply_bytes) };
+    let prefix = if entry.restoring { hard } else { u64::from(limits.bytes) };
+    let row_bytes = if entry.restoring { hard } else { u64::from(limits.transcript_bytes) };
     let Ok(count) = u32::try_from(rows.len()) else {
         return Err(Failure::Rows);
     };
@@ -349,7 +391,7 @@ fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> 
             .checked_add(owned)
             .ok_or(Failure::Bytes)?;
         let total = bytes.checked_add(size).ok_or(Failure::Bytes)?;
-        if cutting || owned > u64::from(limits.transcript_bytes) || total > u64::from(limits.bytes) {
+        if cutting || owned > row_bytes || total > prefix {
             cutting = true;
             removed_bytes = removed_bytes.checked_add(size).ok_or(Failure::Bytes)?;
         } else {
@@ -397,7 +439,7 @@ fn check(entry: &Entry, limits: &Limits, rows: &[Record], next: Option<Key>) -> 
             | Range::Forge => {}
         }
     }
-    if bytes.checked_add(removed_bytes).ok_or(Failure::Bytes)? > u64::from(limits.reply_bytes) {
+    if bytes.checked_add(removed_bytes).ok_or(Failure::Bytes)? > hard {
         return Err(Failure::Bytes);
     }
     let cut = if cutting {

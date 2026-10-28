@@ -363,6 +363,7 @@ pub fn load(
     range: temper_engine_domain::Range,
 ) -> Box<[temper_engine_domain::Record]> {
     assert!(store.down(temper_engine_domain::StoreRequest::Load {
+        restoring: false,
         owner: OWNER,
         range,
         after: None,

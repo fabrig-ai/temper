@@ -2702,6 +2702,7 @@ dependencies = [
  "jig-domain-tasks",
  "jig-domain-views",
  "jig-protocol-config",
+ "jig-protocol-store",
  "skein-forge",
  "skein-forge-client",
  "skein-lib",
@@ -2711,6 +2712,7 @@ dependencies = [
  "temper-engine-domain-forge-change",
  "temper-engine-domain-forge-issues",
  "temper-engine-domain-forge-landing",
+ "temper-protocol-store",
 ]
 
 [[package]]

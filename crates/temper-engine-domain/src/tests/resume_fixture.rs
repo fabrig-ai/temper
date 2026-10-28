@@ -118,6 +118,7 @@ pub fn limits() -> engine::Limits {
     };
     let deliveries = 20_u32.max(fleet::max_out(&fleet).checked_add(1).expect("fleet burst plus continuation"));
     let mut limits = engine::Limits {
+        restore_bytes: 0,
         // The same configured core byte budgets as the engine world fixture.
         policy_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.policy_bytes,
         call_answer_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.call_answer_bytes,
@@ -211,6 +212,24 @@ pub fn limits() -> engine::Limits {
         forge: FORGE_LIMITS,
     };
     limits.journal.writes = crate::limits::route_bound(&limits).unwrap().checked_add(limits.call_records).unwrap();
+    let mut store = jig_protocol_config::profile(jig_protocol_config::Profile::Small).store;
+    store.core = engine::core_limits(&limits);
+    store.journal = engine::journal_limits(&limits.journal);
+    let application = temper_protocol_store::application(&limits.forge, limits.tasks.spec_bytes).unwrap();
+    let sizes =
+        jig_protocol_store::sizes::check(&store.core, &application, &store.journal, &store.store, store.orphan_erases)
+            .unwrap();
+    store.store.key = sizes.key;
+    store.store.value = sizes.value;
+    let bounds = temper_protocol_store::bounds(&limits.forge, limits.tasks.spec_bytes).unwrap();
+    let application = temper_protocol_store::v10::Row::worst_case_heap(bounds.limits()).unwrap();
+    limits.restore_bytes = jig_protocol_store::sizes::restore_bytes(&store.store)
+        .max(
+            jig_protocol_store::decoded_worst_case(&store).unwrap()
+                + 2 * application
+                + 2 * u64::try_from(size_of::<engine::Record>()).unwrap(),
+        )
+        .max(u64::from(limits.loads.reply_bytes));
     limits
 }
 

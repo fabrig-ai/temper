@@ -368,7 +368,8 @@ pub fn engine(jig: &jig_protocol_config::Limits, limits: &Limits) -> Option<engi
 
 /// The same effective projection, before sizing can refuse it anonymously.
 pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limits) -> engine::Limits {
-    engine::Limits {
+    let mut root = engine::Limits {
+        restore_bytes: 0,
         journal: limits.root.journal,
         loads: limits.root.loads,
         brief: limits.root.brief,
@@ -385,7 +386,25 @@ pub(crate) fn engine_candidate(jig: &jig_protocol_config::Limits, limits: &Limit
         settings: jig.core.settings,
         call_records: jig.core.call_records,
         forge: forge::Limits { authority_segments: jig.core.authority.segments, ..limits.forge },
-    }
+    };
+    root.restore_bytes = match restore_bytes(&root, &jig.store) {
+        Some(bytes) => bytes,
+        None => 0, // The normal startup admission names the invalid store layout.
+    };
+    root
+}
+
+/// A cold page holds a maximum writer row plus its census owner, using the
+/// already priced store decoder workspace (jig's protocol/store.md, 7.1 and 13).
+#[must_use]
+pub fn restore_bytes(root: &engine::Limits, profile: &jig_protocol_store::Limits) -> Option<u64> {
+    let store = crate::store::layout(root, &root.forge, profile).ok()?;
+    let bounds = temper_protocol_store::bounds(&root.forge, root.tasks.spec_bytes)?;
+    let application = temper_protocol_store::v10::Row::worst_case_heap(bounds.limits())?;
+    let decoded = jig_protocol_store::decoded_worst_case(&store)?
+        .checked_add(application.checked_mul(2)?)?
+        .checked_add(u64::try_from(size_of::<engine::Record>()).ok()?.checked_mul(2)?)?;
+    Some(jig_protocol_store::sizes::restore_bytes(&store.store).max(decoded).max(u64::from(root.loads.reply_bytes)))
 }
 
 const GIT: temper_worker_protocol_git::Limits = temper_worker_protocol_git::Limits {

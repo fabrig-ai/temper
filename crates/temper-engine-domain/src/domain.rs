@@ -397,7 +397,7 @@ impl Domain {
             ),
             next_effect_owner: 1,
             forge_delegating: Map::with_capacity(limits.forge.changes),
-            loads: loads::Loads::new(&limits.loads),
+            loads: loads::Loads::with_restore(&limits.loads, limits.restore_bytes),
             assignments: Map::with_capacity(limits.tasks.tasks),
             payloads: Slab::with_capacity(payload_slots(limits).expect("valid payload room")),
             archive_reads: Slab::with_capacity(limits.loads.loads),
@@ -461,6 +461,7 @@ impl Domain {
                 RestartStep::LoadCore
                 | RestartStep::LoadInbox
                 | RestartStep::RestoreConnector { .. }
+                | RestartStep::Sweep
                 | RestartStep::Switch,
             ) => false,
             Some(

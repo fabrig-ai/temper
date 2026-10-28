@@ -28,6 +28,8 @@ temper-engine-domain-forge-change.workspace = true
 temper-engine-domain-forge-issues.workspace = true
 
 [dev-dependencies]
+jig-protocol-store.workspace = true
+temper-protocol-store.workspace = true
 jig-protocol-config.workspace = true
 skein-world.workspace = true
 

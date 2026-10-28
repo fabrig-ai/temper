@@ -24,7 +24,8 @@ pub(super) struct Flight {
     pub(super) range: engine::Range,
     pub(super) after: Option<engine::Key>,
     pub(super) most: u32,
-    pub(super) bytes: u32,
+    pub(super) bytes: u64,
+    restoring: bool,
     pub(super) offset: Option<u64>,
     waiting: bool,
     pub(super) cursor: Option<store::Cursor>,
@@ -122,10 +123,10 @@ pub fn down(routes: &mut Routes, request: engine::StoreRequest) -> Option<store:
             routes.reads.insert(owner, load).ok()?;
             store::Request::Read { owner, range: *range }
         }
-        engine::StoreRequest::Load { owner: root, range, after, most, bytes } => {
+        engine::StoreRequest::Load { owner: root, range, after, most, bytes, restoring } => {
             let offset = routes.continuation(&range, after.as_ref());
             let owner = routes.token()?;
-            let flight = Flight { root, range, after, most, bytes, offset, waiting: true, cursor: None };
+            let flight = Flight { root, range, after, most, bytes, restoring, offset, waiting: true, cursor: None };
             let request = ranges::request(owner, &flight)?;
             routes.pending.insert(owner, flight).ok()?;
             request
@@ -266,8 +267,8 @@ fn page(
         };
         if cutting
             || decoded.len() >= flight.most
-            || total > u64::from(flight.bytes)
-            || payload_bytes > u64::from(routes.limits.transcript_bytes)
+            || total > flight.bytes
+            || !flight.restoring && payload_bytes > u64::from(routes.limits.transcript_bytes)
         {
             cutting = true;
             continue;
@@ -279,6 +280,24 @@ fn page(
     if cutting && decoded.is_empty() {
         stop(routes, into);
         return;
+    }
+    if decoded.is_empty()
+        && !cutting
+        && let Some(next) = &cursor
+    {
+        let resumed = match &flight.cursor {
+            Some(cursor) => Some(cursor.clone()),
+            None => match &flight.after {
+                Some(key) => ranges::cursor(&flight.range, key),
+                None => None,
+            },
+        };
+        assert!(
+            resumed.as_ref() != Some(next),
+            "restore range {:?}: empty page resumed cursor {:?}",
+            flight.range,
+            next
+        );
     }
     if let engine::Range::Census(_) = &flight.range {
         if cutting {
@@ -299,12 +318,6 @@ fn page(
         return;
     }
     if decoded.is_empty() && !cutting && more {
-        if let Some(next) = &cursor
-            && (next.after.is_empty() || flight.cursor.as_ref() == Some(next))
-        {
-            stop(routes, into);
-            return;
-        }
         flight.after = scanned;
         flight.cursor = cursor;
         flight.offset = offset;

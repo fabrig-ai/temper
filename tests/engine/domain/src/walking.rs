@@ -132,6 +132,7 @@ pub fn limits() -> engine::Limits {
     };
     let deliveries = 20_u32.max(fleet::max_out(&fleet).checked_add(1).expect("fleet burst plus continuation"));
     let mut limits = engine::Limits {
+        restore_bytes: 0,
         policy_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.policy_bytes,
         call_answer_bytes: jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.call_answer_bytes,
         settings: jig_domain_core::settings::Limits {
@@ -224,6 +225,11 @@ pub fn limits() -> engine::Limits {
         forge: temper_engine_forge_world::LIMITS,
     };
     limits.journal.writes = writes(&limits);
+    limits.restore_bytes = temper_service::limits::restore_bytes(
+        &limits,
+        &jig_protocol_config::profile(jig_protocol_config::Profile::Small).store,
+    )
+    .expect("fixture cold row workspace");
     limits
 }
 

@@ -32,7 +32,7 @@ pub(super) fn request(owner: skein_lib::Token, flight: &Flight) -> Option<store:
         }
     };
     let rows = flight.most;
-    let bytes = u64::from(flight.bytes);
+    let bytes = flight.bytes;
     let range = match &flight.range {
         Range::Forge => store::Restore::Application(Box::new([temper_protocol_store::interval()])),
         Range::Census(census) => store::Restore::Jig(Box::new([core::RestoreRange::Census(census.clone())])),

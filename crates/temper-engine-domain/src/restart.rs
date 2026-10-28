@@ -6,7 +6,7 @@ use crate::archive::{
 use crate::boundary::{Request, Work};
 use crate::domain::{Domain, close, emit};
 use crate::limits::{Limits, core_limits, environment_core, route_decision};
-use crate::route::{escalation, route_core_requests, route_into};
+use crate::route::{escalation, route_into};
 use crate::{Decision, Delivery, Key, Range, Record, loads};
 use alloc::boxed::Box;
 use jig_domain_people as people;
@@ -70,7 +70,12 @@ pub(crate) fn request_load(
             domain.limits.loads.rows.min(domain.limits.notes.load_rows)
         }
     };
-    if loads::begin(&mut domain.loads, waiter, range.clone(), after, most, &mut load_out).is_none() {
+    let owner = if waiter == Token::new(u64::MAX) {
+        loads::begin_restore(&mut domain.loads, waiter, range.clone(), after, most, &mut load_out)
+    } else {
+        loads::begin(&mut domain.loads, waiter, range.clone(), after, most, &mut load_out)
+    };
+    if owner.is_none() {
         match range {
             Range::Core(crate::CoreRange::TaskTranscript { .. }) => {
                 transcript_failed(domain, waiter);
@@ -128,8 +133,8 @@ pub(crate) fn request_load(
         }
     }
     match load_out.pop().expect("load issued") {
-        loads::Request::Load { owner, range, after, most, bytes } => {
-            out.push(Request::Store(crate::StoreRequest::Load { owner, range, after, most, bytes }));
+        loads::Request::Load { owner, range, after, most, bytes, restoring } => {
+            out.push(Request::Store(crate::StoreRequest::Load { owner, range, after, most, bytes, restoring }));
         }
         loads::Request::Loaded { .. } | loads::Request::Unloaded { .. } => unreachable!("begin only issues IO"),
     }
