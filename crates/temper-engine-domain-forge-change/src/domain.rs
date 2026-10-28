@@ -604,12 +604,13 @@ fn first(mut change: Change, head: [u8; 32], ready_since: Wall, facts: &Facts, n
         change.owns_turn = false;
         return Stepped { change, decision: Decision::None };
     }
+    // domain/forge.md, 9: an active queue repair keeps the turn paused
+    // until CI is known green on the observed tip. Missing CI is not a pass.
+    if facts.queue_repair_active && (facts.base_ci.head != facts.base_tip || facts.base_ci.status != Status::Passed) {
+        return Stepped { change, decision: Decision::Wait { until: None } };
+    }
     if facts.base_ci.head == facts.base_tip && facts.base_ci.status == Status::Failed {
-        return if facts.queue_repair_active {
-            Stepped { change, decision: Decision::Wait { until: None } }
-        } else {
-            Stepped { change, decision: Decision::QueueRepair }
-        };
+        return Stepped { change, decision: Decision::QueueRepair };
     }
     match facts.contains_base {
         Status::Failed => return update_due(change, head, facts.base_tip, ready_since, now, limits),
