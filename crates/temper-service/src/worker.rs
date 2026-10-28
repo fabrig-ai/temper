@@ -645,9 +645,7 @@ impl Worker {
         self.env.now = now;
         self.env.wall = wall;
         self.sources.fire(now, &mut self.events, &mut self.io);
-        if !self.started {
-            self.started = true;
-        }
+        self.started = true;
         if !self.git.started && !self.stopping {
             self.git.started = true;
             self.git.component.start(now, &mut self.git.out);
