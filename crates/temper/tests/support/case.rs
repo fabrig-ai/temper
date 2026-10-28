@@ -759,6 +759,7 @@ impl Judge {
             json!([{"name":"fake","window":1_048_576,"output":8192},{"name":"owner","window":1_048_576,"output":8192}]);
         document["added_keys"] =
             json!([self.client.parent().expect("scratch").join(temper_real_loop_world::case::SECOND_KEY_FILE)]);
+        document["asked"] = json!([]);
         document["cued"] = encode(&(self.scripts)(address), &(self.rules)());
         assert!(self.cast.len() > 1 || !has_holds(&document["cued"]), "one worker has no placed hold");
         if has_holds(&document["cued"]) {

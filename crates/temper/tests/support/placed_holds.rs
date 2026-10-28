@@ -81,7 +81,7 @@ fn rules(entries: &[(&str, u32)]) -> Box<[Rule]> {
 }
 fn llm(config: &Path, expected_exits: Vec<(usize, u8)>) -> boxed::CtlLlm {
     let config = config.to_path_buf();
-    let recipe = temper_real_loop_world::llm::played_by_input(
+    let recipe = temper_real_loop_world::llm::played_by_input_open(
         scripts(),
         Box::new([
             rules(&[

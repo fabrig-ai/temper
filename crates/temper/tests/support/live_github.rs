@@ -159,9 +159,9 @@ pub(crate) fn configure_engine(value: &mut Value, owner: &str, api: SocketAddr, 
 fn configure_llm(path: &Path, inputs: &Inputs) {
     github_land::configure_llm(path);
     let mut value = document(path);
-    value["cued"][0]["turns"][0]["lines"][0]["arguments"]["repository"] =
+    value["asked"][0]["turns"][0]["lines"][0]["arguments"]["repository"] =
         format!("{}/{}", inputs.owner, REPOSITORY).into();
-    value["cued"][1]["turns"] = json!([
+    value["cued"][0]["turns"] = json!([
         {"lines":[{"call":"write","arguments":{"path":format!("probe/{}.md",inputs.run),"content":format!("temper live run {}\n",inputs.run)}}],"finish":"tool_calls","tokens":20},
         {"lines":[{"call":"finish","arguments":{"form":"change","fields":{"title":format!("Live run {}",inputs.run),"body":format!("Adds probe/{}.md.",inputs.run)}}}],"finish":"tool_calls","tokens":20}
     ]);

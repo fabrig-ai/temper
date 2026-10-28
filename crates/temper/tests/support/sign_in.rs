@@ -562,7 +562,7 @@ pub(super) fn plan_peer(scripts: Box<[skein_fake_llm_domain::api::Script]>) -> s
         .unwrap_or(0);
     // Retain the ordinary peer's room for script slots and wire framing.
     let strings = 16_384_u32.checked_add(u32::try_from(largest).expect("scripted item length")).expect("peer strings");
-    plan_recipe(temper_real_loop_world::llm::scripted_sized(scripts, strings))
+    plan_recipe(temper_real_loop_world::llm::scripted_open(scripts, strings))
 }
 
 /// Serve a recorded document through the same TLS plan-account transport.

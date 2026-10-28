@@ -15,6 +15,75 @@
   ],
   "cued": [
     {{
+      "cue": "## Task\n\n@coding NOTICE",
+      "turns": [
+        {{
+          "lines": [
+            {{
+              "call": "write",
+              "arguments": {{
+                "path": "NOTICE",
+                "content": "Maintained by temper.\n"
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }},
+        {{
+          "lines": [
+            {{
+              "call": "shell",
+              "arguments": {{
+                "command": "test -f NOTICE && grep -q Maintained NOTICE"
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }},
+        {{
+          "lines": [
+            {{
+              "call": "finish",
+              "arguments": {{
+                "form": "change",
+                "fields": {{
+                  "title": "Add NOTICE",
+                  "body": "Adds NOTICE, as asked."
+                }}
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }}
+      ]
+    }},
+    {{
+      "cue": "Review this change at the named head",
+      "turns": [
+        {{
+          "lines": [
+            {{
+              "call": "finish",
+              "arguments": {{
+                "form": "verdict",
+                "label": "1",
+                "text": "Checked",
+                "fields": {{}},
+                "items": []
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }}
+      ]
+    }}
+  ],
+  "asked": [
+    {{
       "cue": "cluster-first-chat",
       "turns": [
         {{
@@ -215,76 +284,8 @@
           "tokens": 20
         }}
       ]
-    }},
-    {{
-      "cue": "## Task\n\n@coding NOTICE",
-      "turns": [
-        {{
-          "lines": [
-            {{
-              "call": "write",
-              "arguments": {{
-                "path": "NOTICE",
-                "content": "Maintained by temper.\n"
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }},
-        {{
-          "lines": [
-            {{
-              "call": "shell",
-              "arguments": {{
-                "command": "test -f NOTICE && grep -q Maintained NOTICE"
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }},
-        {{
-          "lines": [
-            {{
-              "call": "finish",
-              "arguments": {{
-                "form": "change",
-                "fields": {{
-                  "title": "Add NOTICE",
-                  "body": "Adds NOTICE, as asked."
-                }}
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }}
-      ]
-    }},
-    {{
-      "cue": "Review this change at the named head",
-      "turns": [
-        {{
-          "lines": [
-            {{
-              "call": "finish",
-              "arguments": {{
-                "form": "verdict",
-                "label": "1",
-                "text": "Checked",
-                "fields": {{}},
-                "items": []
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }}
-      ]
     }}
   ],
-  "asked": [],
   "otherwise": [
     "This model makes one change. Ask a chat for it in these words: Add a file NOTICE to widget holding one line: Maintained by temper."
   ]

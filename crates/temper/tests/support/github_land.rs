@@ -625,7 +625,7 @@ impl Referee<cluster::Root> for Judge {
             let path = self.members.dir("llm").join("llm.json");
             configure_llm(&path);
             let mut value: Value = serde_json::from_slice(&fs::read(&path).expect("LLM fixture")).expect("LLM JSON");
-            value["cued"][0]["turns"].as_array_mut().expect("chat turns").insert(
+            value["asked"][0]["turns"].as_array_mut().expect("chat turns").insert(
                 2,
                 serde_json::json!({"lines":[{"call":"read_pull_for","arguments":{"head":"temper/1/c2","base":"main"}}],"finish":"tool_calls","tokens":20}),
             );
@@ -788,10 +788,10 @@ fn decode(value: &Value) -> Box<[u8]> {
 pub(crate) fn configure_llm(path: &Path) {
     use serde_json::json;
     let mut value: Value = serde_json::from_slice(&fs::read(path).expect("LLM fixture")).expect("LLM JSON");
-    value["cued"][0]["turns"][0]["lines"] =
+    value["asked"][0]["turns"][0]["lines"] =
         json!([{"call":"change","arguments":{"words":"@coding Fix","repository":"acme/app"}}]);
     // This fixture's chat is Open, as in forge_land: text replies, then Close ends it.
-    value["cued"][0]["turns"].as_array_mut().expect("chat turns").extend([
+    value["asked"][0]["turns"].as_array_mut().expect("chat turns").extend([
         json!({"lines":[{"text":"The change landed."}],"finish":"stop","tokens":20}),
         json!({"lines":[{"text":"The change chat is closed."}],"finish":"stop","tokens":20}),
     ]);

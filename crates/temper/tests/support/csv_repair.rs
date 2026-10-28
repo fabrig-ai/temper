@@ -414,7 +414,7 @@ pub fn assert_briefs(model: &super::forge_land::Seen, landed: &Value) {
     }
     let mut received = String::new();
     for query in &model.requests {
-        if String::from_utf8_lossy(&query.system).contains("[Requested by person 1]") {
+        if super::forge_land::first_request_has(query, b"[Requested by person 1]") {
             for message in &query.messages {
                 if message.role == skein_fake_llm_domain::api::Role::User {
                     for part in &message.parts {

@@ -13,6 +13,59 @@
   ],
   "cued": [
     {{
+      "cue": "## Task\n\n@coding Fix",
+      "turns": [
+        {{
+          "lines": [
+            {{
+              "call": "read",
+              "arguments": {{
+                "path": "README.md"
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }},
+        {{
+          "lines": [
+            {{
+              "call": "edit",
+              "arguments": {{
+                "path": "README.md",
+                "edits": [
+                  {{
+                    "old": "# Widget\n\nA small repository for temper's QA loop.\n",
+                    "new": "# Widget\n\nA small repository for temper's QA loop.\nChanged by temper.\n"
+                  }}
+                ]
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }},
+        {{
+          "lines": [
+            {{
+              "call": "finish",
+              "arguments": {{
+                "form": "change",
+                "fields": {{
+                  "title": "Update README",
+                  "body": "Changed by temper."
+                }}
+              }}
+            }}
+          ],
+          "finish": "tool_calls",
+          "tokens": 20
+        }}
+      ]
+    }}
+  ],
+  "asked": [
+    {{
       "cue": "@forge_chat",
       "turns": [
         {{
@@ -150,60 +203,8 @@
           "tokens": 20
         }}
       ]
-    }},
-    {{
-      "cue": "## Task\n\n@coding Fix",
-      "turns": [
-        {{
-          "lines": [
-            {{
-              "call": "read",
-              "arguments": {{
-                "path": "README.md"
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }},
-        {{
-          "lines": [
-            {{
-              "call": "edit",
-              "arguments": {{
-                "path": "README.md",
-                "edits": [
-                  {{
-                    "old": "# Widget\n\nA small repository for temper's QA loop.\n",
-                    "new": "# Widget\n\nA small repository for temper's QA loop.\nChanged by temper.\n"
-                  }}
-                ]
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }},
-        {{
-          "lines": [
-            {{
-              "call": "finish",
-              "arguments": {{
-                "form": "change",
-                "fields": {{
-                  "title": "Update README",
-                  "body": "Changed by temper."
-                }}
-              }}
-            }}
-          ],
-          "finish": "tool_calls",
-          "tokens": 20
-        }}
-      ]
     }}
   ],
-  "asked": [],
   "otherwise": [
     "Hello."
   ]

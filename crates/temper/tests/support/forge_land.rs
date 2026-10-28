@@ -458,7 +458,7 @@ pub fn assert_requests(seen: &Seen, count: usize, words: &[u8], first: bool) {
     let mut counts = [0; 3];
     for query in &seen.requests {
         let has = |cue: &[u8]| query.system.windows(cue.len()).any(|part| part == cue);
-        let kind = if has(words) {
+        let kind = if first_request_has(query, words) {
             0
         } else if has(b"## Task\n\n@coding Append this README line:") {
             1
@@ -2372,4 +2372,15 @@ fn kept_project(client: &std::path::Path, me: &serde_json::Value, pulls: &[serde
         return Ok(project);
     }
     Err("kept deployment lacks a merged work/hello change".into())
+}
+
+/// S14 carries an Open run's whole brief in its first user message.
+pub fn first_request_has(query: &skein_fake_llm_domain::api::Query, cue: &[u8]) -> bool {
+    use skein_fake_llm_domain::api::{Part, Role};
+    query.messages.iter().find(|message| message.role == Role::User).is_some_and(|message| {
+        message
+            .parts
+            .iter()
+            .any(|part| matches!(part, Part::Text { text } if skein_lib::bytes::find(text, cue).is_some()))
+    })
 }
