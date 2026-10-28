@@ -97,10 +97,10 @@ fn a_chat_on_claude_code_lands_its_change_on_the_forge() {
     assert_eq!(
         smith_fake_claude::selections(&bytes),
         [
+            Seen::Selected { script: Selection::Asked(0), turn: 0 },
             Seen::Selected { script: Selection::Cued(0), turn: 0 },
             Seen::Selected { script: Selection::Cued(1), turn: 0 },
-            Seen::Selected { script: Selection::Cued(2), turn: 0 },
-            Seen::Selected { script: Selection::Cued(0), turn: 1 },
+            Seen::Selected { script: Selection::Asked(0), turn: 1 },
         ]
     );
     let acts: Vec<_> =

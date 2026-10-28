@@ -31,7 +31,7 @@ const REPLIES: usize = 2;
 fn a_chat_on_a_program_source_replies_parks_and_resumes() {
     let scratch = Scratch::new("program-chat");
     let story = Story {
-        cued: vec![Script {
+        asked: vec![Script {
             cue: FIRST.into(),
             turns: [ONE, TWO]
                 .into_iter()
@@ -96,7 +96,7 @@ fn a_chat_on_a_program_source_replies_parks_and_resumes() {
     assert_eq!(program["state"], "usable");
 
     // Each read fills its bounded conversation across the engine's activity pages.
-    // Smith puts the opening request in the brief, not a person transcript message.
+    // Smith opens the run with the complete brief as a user message.
     let first = &ran.calls()[FIRST_REPLY].stdout;
     assert_eq!(occurrences(first, ONE.as_bytes()), 1);
     assert_eq!(occurrences(first, TWO.as_bytes()), 0);
@@ -166,14 +166,15 @@ fn check_program(bytes: &[u8]) {
         };
         texts.push(text);
     }
-    // Smith opens from its brief with BEGIN; the resumed input carries the person's next words.
-    assert!(!texts[0].contains(FIRST) && !texts[0].contains(SECOND), "{}", texts[0]);
+    // The fresh input carries the person's brief; the resume carries their next words.
+    assert!(texts[0].contains(FIRST) && !texts[0].contains(SECOND), "{}", texts[0]);
+    assert!(!texts[0].contains("Begin the work your brief describes."), "{}", texts[0]);
     assert!(texts[1].contains(SECOND), "{}", texts[1]);
     assert_eq!(
         smith_fake_claude::selections(bytes),
         [
-            Seen::Selected { script: Selection::Cued(0), turn: 0 },
-            Seen::Selected { script: Selection::Cued(0), turn: 1 }
+            Seen::Selected { script: Selection::Asked(0), turn: 0 },
+            Seen::Selected { script: Selection::Asked(0), turn: 1 }
         ]
     );
 }

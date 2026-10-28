@@ -293,27 +293,23 @@ pub fn program_story(repository: u64, readme: &[u8]) -> smith_fake_claude::Story
     let call = |tool: &str, input| Step::Call { tool: tool.into(), input };
     let (original, changed) = readme_text(readme, EDIT);
     Story {
+        asked: vec![Script {
+            cue: PROGRAM_WORDS.into(),
+            turns: vec![
+                Turn {
+                    steps: vec![
+                        call(
+                            "delegate",
+                            delegate_input(ChangeAuthority { coding_kind: 1, scope: None }, repository, CODING_WORDS),
+                        ),
+                        Step::Text(REQUESTED.into()),
+                    ],
+                    ..Turn::default()
+                },
+                Turn { steps: vec![Step::Text(LANDED.into())], ..Turn::default() },
+            ],
+        }],
         cued: vec![
-            Script {
-                cue: PROGRAM_WORDS.into(),
-                turns: vec![
-                    Turn {
-                        steps: vec![
-                            call(
-                                "delegate",
-                                delegate_input(
-                                    ChangeAuthority { coding_kind: 1, scope: None },
-                                    repository,
-                                    CODING_WORDS,
-                                ),
-                            ),
-                            Step::Text(REQUESTED.into()),
-                        ],
-                        ..Turn::default()
-                    },
-                    Turn { steps: vec![Step::Text(LANDED.into())], ..Turn::default() },
-                ],
-            },
             Script {
                 cue: format!("## Task\n\n{CODING_WORDS}"),
                 turns: vec![Turn {
