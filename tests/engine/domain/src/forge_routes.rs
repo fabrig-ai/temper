@@ -885,7 +885,7 @@ impl World {
     /// Restart with a different deployment charter while retaining the change rows.
     pub fn restart_with_charter(&mut self, with_read: bool, with_change: bool, forge_charter: Option<u32>) {
         assert!(self.store.pending.is_empty(), "the chosen cut resolves store uncertainty first");
-        // A standing main poll may be in flight at the chosen cut. Its old
+        // A task or tier watch may be in flight at the chosen cut. Its old
         // transport terminal belongs to the lost process, like an outbox call.
         self.pending.clear();
         self.api_generation += 1;
