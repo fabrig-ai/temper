@@ -68,6 +68,7 @@ pub(crate) struct PendingStep {
     pull: Option<skein_forge::api::Pull>,
     ci: change::Status,
     base_ci: change::Status,
+    base_failed: crate::ResultText,
     contains_base: change::Status,
     reviews: Box<[skein_forge::api::Review]>,
     reviews_complete: bool,
@@ -1276,7 +1277,9 @@ pub fn step(d: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queue<Req
                 return;
             };
             let max_job_bytes = match source {
-                crate::BriefSource::Ci { .. } => env.limits.client.answer_bytes.min(ci_budget / 5).max(1),
+                crate::BriefSource::Ci { .. } | crate::BriefSource::BranchCi { .. } => {
+                    env.limits.client.answer_bytes.min(ci_budget / 5).max(1)
+                }
                 crate::BriefSource::Home { .. }
                 | crate::BriefSource::Reviews { .. }
                 | crate::BriefSource::Pull { .. } => 0,
@@ -2562,6 +2565,7 @@ fn step_change(d: &mut Domain, env: &Env<Limits>, input: StepInput, out: &mut Qu
         pull: None,
         ci: change::Status::Unknown,
         base_ci: change::Status::Unknown,
+        base_failed: crate::ResultText::empty(),
         contains_base: change::Status::Unknown,
         reviews: Box::new([]),
         reviews_complete: true,
@@ -2607,6 +2611,7 @@ fn step_read(
                 },
                 entry: None,
                 evidence: None,
+                failure: None,
             },
         );
         return;
@@ -2707,6 +2712,14 @@ fn step_read(
             match result {
                 Ok(skein_forge::api::Answer::Checks(rows)) => {
                     pending.base_ci = status(crate::ci::fold(&rows, required));
+                    for check in &rows {
+                        if check.check == skein_forge::api::Check::Failed {
+                            if !pending.base_failed.bytes.is_empty() || pending.base_failed.cut > 0 {
+                                pending.base_failed.add(b", ", env.limits.client.answer_bytes);
+                            }
+                            pending.base_failed.add(&check.context, env.limits.client.answer_bytes);
+                        }
+                    }
                 }
                 Ok(_) | Err(_) => pending.base_ci = change::Status::Unknown,
             }
@@ -2936,6 +2949,11 @@ fn decide_step(d: &mut Domain, env: &Env<Limits>, pending: &PendingStep, out: &m
                         decision: crate::settle::cap(d, env, &row, &facts, decision),
                         entry: None,
                         evidence: None,
+                        failure: if decision == change::Decision::QueueRepair {
+                            Some(crate::BranchFailure { head: base_tip, failed: pending.base_failed.clone() })
+                        } else {
+                            None
+                        },
                     },
                 );
                 return;
@@ -3073,6 +3091,7 @@ fn emit_change_effect(
                 decision: change::Decision::Hold(change::Hold::Failed),
                 entry: None,
                 evidence: None,
+                failure: None,
             },
         );
         return;
@@ -3119,6 +3138,7 @@ fn emit_change_effect(
             task: row.task,
             decision: change::Decision::Effect(effect),
             entry: Some(pending.entry),
+            failure: None,
             evidence: Some(crate::ChangeEvidence {
                 prior,
                 head: pending.branch,
@@ -3278,7 +3298,10 @@ fn change_outcome(
         | skein_forge_client::Outcome::Held
         | skein_forge_client::Outcome::Withdrawn => {}
     }
-    emit(out, Request::ChangeDecision { task, decision: change::Decision::None, entry: None, evidence: None });
+    emit(
+        out,
+        Request::ChangeDecision { task, decision: change::Decision::None, entry: None, evidence: None, failure: None },
+    );
 }
 
 /// A release adopts an observed head, including the client's drift baseline.
