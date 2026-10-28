@@ -19,10 +19,7 @@ fn a_stock_policy_past_its_limit_refuses_before_listening() {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let path = scratch.path().join("temper.json");
     let mut document: serde_json::Value = serde_json::from_slice(&fs::read(&path).expect("deployment")).expect("JSON");
-    document["engine"]["projects"] = serde_json::json!([]);
     document["engine"]["limits"]["overrides"]["core.policy_bytes"] = 100.into();
-    document["application"]["demo"] = serde_json::Value::Null;
-    document["application"]["landing"] = serde_json::json!({"deployment": [], "projects": []});
     fs::write(&path, serde_json::to_vec(&document).expect("JSON")).expect("deployment");
     let output = std::process::Command::new(skein_scratch::paths::binary("temper"))
         .arg("serve")
