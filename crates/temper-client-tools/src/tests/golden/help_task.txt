@@ -24,3 +24,5 @@ task amend TASK [--rev REV] [--priority PRIORITY | --untracked] [--deadline TIME
   Amend a task: each control you name is replaced, the rest kept
 task decide TASK --hold REV release|leave|pass-up [REASON] [--key KEY]
   Decide the escalation of a held task
+task hold TASK --stop REASON [--key KEY]
+  Place a hold of yours over a task and every task below it

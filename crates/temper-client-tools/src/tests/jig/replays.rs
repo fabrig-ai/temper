@@ -81,6 +81,7 @@ fn serve(root: &mut f::Harness, number: u32, document: c::ReadResult) {
         root.serve(number, ended());
     }
 }
+const TASK_HOLD_CALL: &[&str] = &["task", "hold", "41", "--stop", "Review the work", "--key", "place-hold"];
 fn replay(argv: &[&str]) {
     for json in [false, true] {
         for fresh in [false, true] {
@@ -90,7 +91,12 @@ fn replay(argv: &[&str]) {
             serve(&mut root, first, f::act_document(&parsed));
             let ask = f::encoded(&root.sends.get(&first).expect("first act sent").2);
             let key = root.sent_name(first);
-            root.done(first, c::Outcome::Changed);
+            let outcome = if parsed.tool == rows::TASK_HOLD_AT {
+                c::Outcome::Owner(c::OwnerOutcome::Placed { hold: 12, revision: c::Revision { value: 1 } })
+            } else {
+                c::Outcome::Changed
+            };
+            root.done(first, outcome.clone());
             let expected = root.answer(first).expect("first outcome");
             if fresh {
                 root = f::chat_root(f::CHAT_BUDGET, f::OTHER_SEED);
@@ -99,7 +105,7 @@ fn replay(argv: &[&str]) {
             serve(&mut root, second, retired(&parsed));
             assert_eq!(f::encoded(&root.sends.get(&second).expect("replay sent").2), ask, "{argv:?}");
             assert_eq!(root.sent_name(second), key);
-            root.done(second, c::Outcome::Changed);
+            root.done(second, outcome);
             let actual = root.answer(second).expect("replayed outcome");
             assert_eq!(
                 (actual.status, actual.stdout, actual.stderr),
@@ -119,6 +125,10 @@ fn task_answer_replays_its_retained_question() {
 #[test]
 fn task_cancel_replays_after_end_in_this_or_a_fresh_directory() {
     replay(f::ACT_CALLS[7]);
+}
+#[test]
+fn task_hold_replays_after_end() {
+    replay(TASK_HOLD_CALL);
 }
 #[test]
 fn task_stop_replays_after_end() {
@@ -214,6 +224,7 @@ fn a_mismatched_historical_subject_cannot_route_an_act() {
 // print its first refusal in both formats. This also guards future table rows.
 const DIRECT_CALLS: &[&[&str]] = &[
     f::CREATE_CHAT_CALL,
+    &["project", "hold", "shop", "--stop", "Review the project", "--key", "project-hold"],
     f::ADOPTION,
     &["account", "connect", "9", "--key", "connect"],
     &["account", "disconnect", "43", "--key", "disconnect"],
@@ -300,6 +311,7 @@ fn replay_cases_cover_every_keyed_verb_in_the_tools_table() {
         covered.push(f::call(argv).tool);
     }
     covered.push(rows::AMEND_AT);
+    covered.push(f::call(TASK_HOLD_CALL).tool);
     for (index, tool) in crate::table::TOOLS.iter().enumerate() {
         if tool.keyed != crate::jig::table::Keyed::Never {
             assert!(covered.contains(&u8::try_from(index).unwrap()), "missing replay for {:?}", tool.name);
