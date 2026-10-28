@@ -262,14 +262,15 @@ fn a_hold_and_writer_slot_are_exclusive_until_answered() {
 fn an_outbox_entry_waits_for_its_commit() {
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
-    let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    assert_eq!(restored.as_ref(), &[Request::RestartDone { stage: RestartStage::Restored }]);
+    assert_eq!(
+        outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic }).as_ref(),
+        &[Request::RestartDone { stage: RestartStage::Restored }],
+    );
     assert_eq!(
         outputs(&mut d, Event::ReadAfresh).as_ref(),
-        &[Request::RestartDone { stage: RestartStage::ReadAfresh }]
+        &[Request::RestartDone { stage: RestartStage::ReadAfresh }],
     );
-    assert!(outputs(&mut d, Event::SettleOutbox).contains(&Request::RestartDone { stage: RestartStage::Settled }));
-    fixtures::prime_main(&mut d);
+    assert_eq!(outputs(&mut d, Event::SettleOutbox).as_ref(), &[Request::RestartDone { stage: RestartStage::Settled }],);
     let entry = status(11, 7);
     assert_eq!(
         outputs(&mut d, Event::Enqueue { entry: entry.clone() }).as_ref(),
@@ -545,8 +546,10 @@ fn restored_ci_subscriptions_are_read_in_the_fresh_step_and_delay_its_completion
             }),
         },
     );
-    let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    assert_eq!(restored.last(), Some(&Request::RestartDone { stage: RestartStage::Restored }));
+    assert_eq!(
+        outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic }).as_ref(),
+        &[Request::RestartDone { stage: RestartStage::Restored }]
+    );
     let fresh = outputs(&mut d, Event::ReadAfresh);
     assert!(fresh.is_empty(), "the subscription read is scheduled before completion");
     let calls = ready(&mut d);
@@ -725,22 +728,22 @@ fn held_creation() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     d
 }
 
 #[test]
 fn a_held_effect_survives_a_restart_out_of_the_clients_outbox() {
     let mut d = held_restored();
-    let restored = outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
-    assert_eq!(restored.as_ref(), &[Request::RestartDone { stage: RestartStage::Restored }]);
+    assert_eq!(
+        outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic }).as_ref(),
+        &[Request::RestartDone { stage: RestartStage::Restored }]
+    );
     assert_eq!(
         outputs(&mut d, Event::ReadAfresh).as_ref(),
         &[Request::RestartDone { stage: RestartStage::ReadAfresh }]
     );
     // Nothing is looked for: the client never had the held entry.
-    assert!(outputs(&mut d, Event::SettleOutbox).contains(&Request::RestartDone { stage: RestartStage::Settled }));
-    fixtures::prime_main(&mut d);
+    assert_eq!(outputs(&mut d, Event::SettleOutbox).as_ref(), &[Request::RestartDone { stage: RestartStage::Settled }]);
     assert!(ready(&mut d).is_empty());
     assert!(!d.effect_room(&LIMITS, 7), "the held entry keeps its room");
 }
@@ -773,7 +776,7 @@ fn a_held_effect_asked_again_is_looked_for_first_even_with_an_otherwise_full_out
     assert_eq!(
         ready(&mut d).as_ref(),
         &[Request::Call {
-            call: Token::new(3),
+            call: Token::new(1),
             repository: REPO,
             op: skein_forge::api::Op::Read(skein_forge::api::Read::Items {
                 since: Time::from_nanos(1),
@@ -862,7 +865,6 @@ fn four_writers() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    fixtures::prime_main(&mut d);
     d
 }
 
@@ -893,16 +895,16 @@ fn a_lost_writers_read_refused_for_room_is_asked_again_when_room_frees() {
     ready(&mut d);
     ready(&mut d);
     // The first branch moved; its comparison finds the client's table full.
-    assert!(branch_at(&mut d, 3, 4).is_empty(), "nothing refused");
+    assert!(branch_at(&mut d, 1, 4).is_empty(), "nothing refused");
     ready(&mut d);
     ready(&mut d);
-    branch_at(&mut d, 4, 2);
+    branch_at(&mut d, 2, 2);
     ready(&mut d);
-    branch_at(&mut d, 5, 2);
+    branch_at(&mut d, 3, 2);
     assert_eq!(
         ready(&mut d).as_ref(),
         &[Request::Call {
-            call: Token::new(7),
+            call: Token::new(5),
             repository: REPO,
             op: skein_forge::api::Op::Read(skein_forge::api::Read::Compare { before: [2; 32], after: [4; 32] }),
         }]
@@ -973,7 +975,7 @@ fn a_release_waits_for_its_lost_writers_reread_even_after_restart() {
 }
 
 /// Restart rebuilds the fresh read from the durable lost writer alone.
-fn restarted_lost_writer() -> (Domain, Token) {
+fn restarted_lost_writer() -> Domain {
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
     outputs(
@@ -990,9 +992,7 @@ fn restarted_lost_writer() -> (Domain, Token) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    let (call, _) = fixtures::next_call(&mut d);
-    fixtures::prime_main(&mut d);
-    (d, call)
+    d
 }
 
 #[test]
@@ -1002,8 +1002,8 @@ fn a_lost_writers_read_answered_not_connected_is_asked_again_when_its_forge_conn
         Ok(skein_forge::api::Answer::Commit([2; 32])),
         Err(skein_forge::api::Error::Refused),
     ] {
-        let (mut d, pending) = restarted_lost_writer();
-        let waiting = fixtures::answer(&mut d, pending, Err(skein_forge::api::Error::NotConnected));
+        let mut d = restarted_lost_writer();
+        let waiting = fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
         assert!(!waiting.contains(&Request::Refused { task: 9 }));
         assert_eq!(d.hold(&run_branch(b"7")).unwrap().writer, Some(Writer::Lost { task: 9, attempt: 1 }));
         assert!(!d.is_ready(), "a connection wait has no ready work");
@@ -1029,8 +1029,8 @@ fn a_lost_writers_read_answered_not_connected_is_asked_again_when_its_forge_conn
 
 #[test]
 fn a_release_waits_for_its_lost_writers_read_until_its_forge_connects() {
-    let (mut d, pending) = restarted_lost_writer();
-    fixtures::answer(&mut d, pending, Err(skein_forge::api::Error::NotConnected));
+    let mut d = restarted_lost_writer();
+    fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
     let closing =
         outputs(&mut d, Event::Release { task: 7, root: 7, ending: ReleaseEnding::Cancelled, reason: None, entry: 20 });
     assert!(!closing.contains(&Request::ReleaseFailed { task: 7 }));
@@ -1079,8 +1079,8 @@ fn a_release_waits_for_its_lost_writers_read_until_its_forge_connects() {
 
 #[test]
 fn another_forges_connection_does_not_ask_a_lost_writers_read_again() {
-    let (mut d, pending) = restarted_lost_writer();
-    fixtures::answer(&mut d, pending, Err(skein_forge::api::Error::NotConnected));
+    let mut d = restarted_lost_writer();
+    fixtures::answer_next(&mut d, Err(skein_forge::api::Error::NotConnected));
     outputs(
         &mut d,
         Event::Connection { forge: 2, state: Connection::Connected { id: 8, login: Box::from(b"other".as_slice()) } },
@@ -1110,15 +1110,15 @@ fn a_release_waits_while_its_lost_writer_is_waiting_for_read_room() {
     ready(&mut d);
     ready(&mut d);
     // Branch temper/10 sorts first; its comparison waits for call room.
-    branch_at(&mut d, 3, 4);
+    branch_at(&mut d, 1, 4);
     let closing =
         outputs(&mut d, Event::Release { task: 10, root: 10, ending: ReleaseEnding::Done, reason: None, entry: 20 });
     assert!(!closing.contains(&Request::ReleaseFailed { task: 10 }));
     ready(&mut d);
     ready(&mut d);
-    branch_at(&mut d, 4, 2);
+    branch_at(&mut d, 2, 2);
     ready(&mut d);
-    branch_at(&mut d, 5, 2);
+    branch_at(&mut d, 3, 2);
     let (call, _) = fixtures::next_call(&mut d);
     let answered = fixtures::answer(
         &mut d,

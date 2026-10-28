@@ -2493,11 +2493,58 @@ fn logged(world: &World, since: Wall) -> top::LandingsView {
     view
 }
 #[test]
+fn a_push_to_a_main_nobody_watches_is_not_logged() {
+    // Thirty-five seconds exceeds the world's shipped poll interval.
+    const POLL_SECONDS: u64 = 35;
+    let mut world = World::new(71);
+    world.adopt();
+    world.push(b"main", b"outside temper");
+    world.run_for(POLL_SECONDS);
+    world.restart();
+    world.run_for(POLL_SECONDS);
+    assert!(logged(&world, Wall::EPOCH).logged.is_empty());
+}
+
+#[test]
 fn a_coordinator_reads_the_landings_since_a_time() {
     use temper_engine_forge_world::landings;
     const MINUTE: u64 = 60_000_000_000;
+    const GOAL: u64 = 42;
     let mut world = tier_history_world(World::coordinator(), &[]);
     world.adopt_kit();
+    // The coordinator's goal follows kit's landings; the log adds no watch.
+    let kit = world
+        .stored()
+        .iter()
+        .find_map(|(_, record)| {
+            if let top::Stored::Repository(row) = record
+                && row.name.as_ref() == b"kit"
+            {
+                Some(row.provider)
+            } else {
+                None
+            }
+        })
+        .expect("adopted kit");
+    world.event(top::Event::Names {
+        task: GOAL,
+        resources: Box::new([top::Name {
+            forge: kit.forge,
+            repository: kit.repository,
+            what: top::What::Branch(Box::new([b"main".as_slice().into()])),
+        }]),
+    });
+    world.event(top::Event::Subscribe {
+        subscription: top::Subscriber {
+            task: GOAL,
+            number: GOAL,
+            topic: top::Topic::Landings { repository: kit, branch: b"main".as_slice().into() },
+            own_change: None,
+            goal_tasks: Some(Box::new([])),
+            paths: Box::new([]),
+        },
+    });
+    world.run_for(1);
     land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
     // TIME is minute-aligned. Cross its next boundary before the outside push.
     let since = Wall::from_nanos(world.wall().as_nanos().div_ceil(MINUTE) * MINUTE);
