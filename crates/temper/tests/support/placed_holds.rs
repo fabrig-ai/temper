@@ -16,7 +16,7 @@ const PROPOSAL: &str = "t1/3";
 
 const GOAL: &str = "@held-goal";
 const CHILD: &str = "@held-child";
-const PARKED_GOAL: &[u8] = b"\"task\":2,\"title\":{\"bytes\":\"@held-goal\",\"cut\":false},\"executor\":{\"agent\":{\"charter\":2}},\"phase\":\"idle\"";
+const PARKED_GOAL: &[u8] = b"\"task\":2,\"title\":{\"bytes\":\"@held-goal\",\"cut\":false},\"executor\":{\"agent\":{\"charter\":1}},\"phase\":\"idle\"";
 const PARKED_CHILD: &[u8] = b"\"task\":3,\"title\":{\"bytes\":\"@held-child\",\"cut\":false},\"executor\":{\"agent\":{\"charter\":2}},\"phase\":\"idle\"";
 
 fn call(name: &[u8], arguments: &Value) -> Turn {
@@ -41,7 +41,7 @@ fn delegate(words: &str, children: bool) -> Turn {
     call(
         b"delegate",
         &json!({"batch":[{
-            "executor":{"kind":"agent","charter":2},
+            "executor":{"kind":"agent","charter":if children {1} else {2}},
             "tracked":{"priority":1},
             "spec":{"words":words,"parameters":[]},
             "contract":{"kind":"report","words":128},
