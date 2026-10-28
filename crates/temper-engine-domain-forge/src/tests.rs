@@ -104,8 +104,11 @@ fn env() -> Env<Limits> {
     Env { now: Time::from_nanos(100_000_000_000), wall: Wall::from_nanos(100_000_000_000), limits: LIMITS }
 }
 fn domain() -> Domain {
+    domain_with_limits(&LIMITS)
+}
+fn domain_with_limits(limits: &Limits) -> Domain {
     Domain::new(
-        &LIMITS,
+        limits,
         4,
         skein_forge_client::Config {
             namespace: Box::from(&b"test"[..]),
@@ -118,8 +121,11 @@ fn domain() -> Domain {
     .expect("valid connector")
 }
 fn outputs(d: &mut Domain, event: Event) -> Box<[Request]> {
-    let mut out = Queue::with_capacity(max_out(&LIMITS));
-    step(d, &env(), event, &mut out);
+    outputs_with_env(d, event, &env())
+}
+fn outputs_with_env(d: &mut Domain, event: Event, env: &Env<Limits>) -> Box<[Request]> {
+    let mut out = Queue::with_capacity(max_out(&env.limits));
+    step(d, env, event, &mut out);
     let mut values = skein_lib::List::with_capacity(out.len());
     for _ in 0..out.len() {
         values.push(out.pop().expect("counted output")).expect("sized from queue");
