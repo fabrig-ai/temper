@@ -502,6 +502,15 @@ pub enum PartyInput {
         subject: core::documents::Watched,
         window: core::documents::Window,
     },
+    /// A landing log query retains its full wall time beside the admitted watch.
+    LoggedLandings {
+        watcher: Token,
+        sign_in: u64,
+        scope: jig_domain_people::ApplicationScope,
+        project: u32,
+        newer_than: Wall,
+        window: core::documents::Window,
+    },
     /// Follow a task's live run from the client's acknowledged turn and offset.
     WatchRun {
         watcher: Token,

@@ -50,6 +50,8 @@ pub struct Limits {
     pub trees_in_flight: u32,
     /// Tiers per repository (domain/after-landing.md, 2).
     pub tiers: u32,
+    /// Landing log entries per adopted repository (domain/after-landing.md, 10).
+    pub landings_kept: u32,
 
     /// Failing tests named by one run (domain/after-landing.md, 4).
     pub failing_tests: u32,
@@ -74,7 +76,8 @@ pub struct Limits {
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "one checked sum of the connector owners and retained payloads")]
 pub fn worst_case(l: &Limits) -> Option<u64> {
-    if l.gates == 0
+    if l.landings_kept == 0
+        || l.gates == 0
         || l.ignored_paths == 0
         || l.repositories == 0
         || l.tasks == 0
@@ -203,6 +206,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
             l.landings.max(l.client.resources),
         )?)?
         .checked_add(crate::verification::worst_case(l)?)?
+        .checked_add(crate::log::worst_case(l)?)?
         .checked_add(crate::tiers::worst_case(l)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
         .checked_add(Map::<u64, crate::ChangeRow>::worst_case(l.changes)?)?
