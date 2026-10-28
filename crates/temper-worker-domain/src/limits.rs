@@ -36,8 +36,8 @@ pub struct Limits {
     /// strictly longer.
     pub stop_bound: Duration,
     /// The backlog, in entries, at which the worker's service stops taking
-    /// new work from the engine (skein's draft `dynamic-memory.md`, 4.4):
-    /// a limit on pacing, not on memory.
+    /// new work from the engine (skein's `programming-model.md`, 7.1;
+    /// `domain/worker.md`, 3.1): a limit on pacing, not on memory.
     pub watermark: u32,
 }
 
