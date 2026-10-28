@@ -453,6 +453,8 @@ fn a_new_binding_answers_only_after_its_commit_is_durable() {
 }
 
 fn runtime_project_root() -> (Domain, Env<Limits>) {
+    // A commit's unique writes in the runtime-project fixture, including its header.
+    const COMMIT_WRITES: u32 = 2120;
     let mut configured = super::resume_fixture::config_with_project_room(1, 2);
     let seed = &configured.core.seed_projects.first().unwrap().policy;
     let policy = jig_domain_core::ConfiguredPolicy {
@@ -464,8 +466,6 @@ fn runtime_project_root() -> (Domain, Env<Limits>) {
     let mut limits = super::resume_fixture::limits();
     limits.authority.projects = 2;
     limits.people.projects = 3;
-    // A commit's unique writes in the runtime-project fixture, including its header.
-    const COMMIT_WRITES: u32 = 2120;
     limits.journal.writes = COMMIT_WRITES;
     let (mut domain, env) = signed_in_root(
         super::resume_fixture::root_with_config_and_limits(configured, &limits),
