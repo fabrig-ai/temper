@@ -38,7 +38,7 @@ pub(crate) fn workstream(key: &[u8]) -> u64 {
 
 #[expect(clippy::manual_map, reason = "explicit option match follows the step subset, without function pointers")]
 fn repository(repository: wire::Repository) -> checkout::Repository {
-    let wire::Repository { tag: _, name, remote, git, start, access, identity, account } = repository;
+    let wire::Repository { tag: _, name, remote, git, start, access, identity, account, save } = repository;
     let (push, expected, landing) = match access {
         wire::Access::ReadOnly => (None, None, None),
         wire::Access::Writable { push, expected, landing } => {
@@ -49,7 +49,18 @@ fn repository(repository: wire::Repository) -> checkout::Repository {
             (Some(push), expected, landing)
         }
     };
-    checkout::Repository { name, remote, git, start: self::start(start), identity, account, push, expected, landing }
+    checkout::Repository {
+        save,
+        name,
+        remote,
+        git,
+        start: self::start(start),
+        identity,
+        account,
+        push,
+        expected,
+        landing,
+    }
 }
 
 fn start(start: wire::Start) -> checkout::Start {

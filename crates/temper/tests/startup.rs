@@ -1165,6 +1165,13 @@ mod memory_figures;
 // Service's inline core headers add 64 bytes and its store loses eight: +56,
 // including worker-alone. System retains 2 * 1,408 + 1 root payloads, so its
 // delta is 2,817 * 16,336 + 56 = 46,018,568 bytes at both engine fixtures.
+// F7 gives each repository a save destination: two repositories at 256-byte
+// names replace one option with two, so Items grows by (2 - 1) * (1 + 4 + 256)
+// = 261 encoded bytes. worker.link's three retained parts add 783 bytes.
+// Per-repository Option<Box<[u8]>> headers and branch bytes replace the former
+// per-save/per-staged branch; Tips adds an optional pushed baseline and a
+// delivered flag. Existing sizeof/container terms price these layouts: the
+// worker root adds 2,104 bytes, and engine workers' codec/transport storage 5,478.
 fn memory_figure(
     name: &str,
     terms: &temper_service::startup::MemoryTerms,

@@ -22,6 +22,8 @@ pub struct Workspace {
 /// A repository of a workspace. Names are compared byte for byte.
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub struct Repository {
+    /// This task's saved-work branch, under this repository's prefix.
+    pub save: Option<Box<[u8]>>,
     /// Deployment repository name, echoed in landed work.
     pub tag: u64,
     /// The directory it sits in, side by side with the workspace's others

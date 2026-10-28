@@ -149,11 +149,7 @@ impl World {
         let hold = self.hold.expect("prepared");
         let message =
             Message { title: b"Merge checked tree".as_slice().into(), body: b"Keep both parents.".as_slice().into() };
-        let event = if saved {
-            Event::Save { hold, branch: b"saved".as_slice().into(), message }
-        } else {
-            Event::Push { hold, message }
-        };
+        let event = if saved { Event::Save { hold, message } } else { Event::Push { hold, message } };
         match self.finish(event, ambiguous) {
             Request::Pushed { outcome: Outcome::Pushed { landings }, .. } if !saved => landings,
             Request::Saved { outcome: Outcome::Pushed { landings }, .. } if saved => landings,
@@ -176,6 +172,7 @@ pub fn run(seed: u64, case: Case, facts: u32) -> Report {
     let spec = Spec {
         key: b"merge".as_slice().into(),
         repositories: Box::new([Repository {
+            save: Some(b"saved".as_slice().into()),
             git: None,
             name: b"temper".as_slice().into(),
             remote: b"forge/temper".as_slice().into(),
@@ -253,6 +250,7 @@ pub fn retry_existing_change(movement: Option<bool>, ambiguous: bool) {
     let spec = |retry| Spec {
         key: b"retry".as_slice().into(),
         repositories: Box::new([Repository {
+            save: Some(b"saved".as_slice().into()),
             git: None,
             name: b"temper".as_slice().into(),
             remote: b"forge/temper".as_slice().into(),

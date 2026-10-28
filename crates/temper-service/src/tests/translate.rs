@@ -22,7 +22,7 @@ fn a_workspace_reaches_items_with_each_remote_made_from_its_base() {
         assert_eq!(first.tag, temper_engine_domain_forge::tag(1, 7), "{base:?}");
         assert_eq!(first.remote.as_ref(), remote, "{base:?}");
         assert_eq!(first.git, None, "a forge without its own program uses the worker's git");
-        assert_eq!(items.save, None, "{base:?}");
+        assert_eq!(first.save.as_deref(), Some(b"temper/7/s7".as_slice()), "{base:?}");
     }
 }
 #[test]
@@ -52,7 +52,7 @@ fn each_repository_takes_its_forges_git_program() {
         let repository = items.repositories().get(0).unwrap();
         assert_eq!(repository.git().as_deref(), program, "forge {number}");
         assert_eq!(repository.remote(), b"https://forge.example/acme/shop.git");
-        let (workspace, _) = translate::workspace(Some(&items));
+        let workspace = translate::workspace(Some(&items));
         assert_eq!(workspace.repositories[0].git.as_deref(), program, "worker's forge {number}");
     }
 }
@@ -290,17 +290,17 @@ fn a_repositorys_account_reaches_the_workers_domain() {
     let original = translate::items(&assignment, &settings.forges, &crate::forge::tokens::Tokens::empty(), &limits)
         .unwrap()
         .unwrap();
-    let (mut expected, save) = translate::workspace(Some(&original));
+    let mut expected = translate::workspace(Some(&original));
     expected.repositories[0].account = Some(19);
     let mut repositories = List::with_capacity(1);
     let repository = original.repositories().get(0).unwrap().clone().into_parts();
     repositories
         .push(wire::Repository::new(&limits, wire::RepositoryParts { account: Some(19), ..repository }).unwrap())
         .unwrap();
-    let items = wire::Items::new(&limits, wire::ItemsParts { repositories, save: original.save().clone() }).unwrap();
+    let items = wire::Items::new(&limits, wire::ItemsParts { repositories }).unwrap();
     let bytes = temper_protocol_worker_wire::items(&items);
     let decoded = wire::Items::decode(&limits, &mut skein_lib::Reader::new(&bytes)).unwrap();
-    assert_eq!(translate::workspace(Some(&decoded)), (expected, save));
+    assert_eq!(translate::workspace(Some(&decoded)), expected);
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn landing_comparison_roundtrips_and_read_only_access_strips_it() {
             .unwrap();
         let encoded = temper_protocol_worker_wire::items(&items);
         let decoded = wire::Items::decode(&limits, &mut skein_lib::Reader::new(&encoded)).expect("items roundtrip");
-        let (workspace, _) = translate::workspace(Some(&decoded));
+        let workspace = translate::workspace(Some(&decoded));
         match &workspace.repositories[0].access {
             temper_worker_domain::wire::Access::Writable { landing, .. } => {
                 assert!(writable);
@@ -328,4 +328,20 @@ fn landing_comparison_roundtrips_and_read_only_access_strips_it() {
             temper_worker_domain::wire::Access::ReadOnly => assert!(!writable),
         }
     }
+}
+
+#[test]
+fn each_repository_keeps_its_own_saved_work_destination() {
+    let settings = fixtures::engine();
+    let mut run = fixtures::assignment_with(fixtures::repository(7, b"acme", b"shop"));
+    let mut other = fixtures::repository(8, b"acme", b"other");
+    other.save = Some(b"other/7/s7".as_slice().into());
+    run.workspace.repositories = Box::new([run.workspace.repositories[0].clone(), other]);
+    let items =
+        translate::items(&run, &settings.forges, &crate::forge::tokens::Tokens::empty(), &fixtures::wire_limits())
+            .unwrap()
+            .unwrap();
+    let workspace = translate::workspace(Some(&items));
+    let saves = [workspace.repositories[0].save.as_deref(), workspace.repositories[1].save.as_deref()];
+    assert_eq!(saves, [Some(b"temper/7/s7".as_slice()), Some(b"other/7/s7".as_slice())]);
 }

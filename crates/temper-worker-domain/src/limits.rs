@@ -216,16 +216,17 @@ fn workspace_memory(limits: &Limits) -> Option<u64> {
         .checked_add(Map::<Token, Id<Workspace>>::worst_case(slots)?)?
         .checked_add(u64::from(slots).checked_mul(u64::from(checkout_limits.repositories).checked_mul(root)?)?)?;
     let staged = slots.checked_add(1)?;
+    // Each staged repository owns name, remote, start, push, landing and save
+    // branch bytes plus its program; save destinations move into the checkout spec.
     let item = u64::try_from(size_of::<wire::Repository>())
         .ok()?
-        .checked_add(name.checked_mul(5)?)?
+        .checked_add(name.checked_mul(6)?)?
         .checked_add(u64::from(checkout::PROGRAM_BYTES))?;
     let feedback = u64::try_from(size_of::<wire::SavedRepository>()).ok()?.checked_add(conflicts)?;
     // Each retained item has a u64 tag and one from-saved flag beside its feedback.
     let per = u64::from(checkout_limits.repositories)
         .checked_mul(item.checked_add(feedback)?.checked_add(9)?)?
         .checked_add(Map::<u64, [u8; 32]>::worst_case(checkout_limits.repositories)?)?
-        .checked_add(name)?
         .checked_add(agent::Delivered::worst_case())?;
     let items = Map::<Token, Items>::worst_case(staged)?
         .checked_add(Map::<(Token, Token), Token>::worst_case(staged)?)?

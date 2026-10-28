@@ -24,9 +24,9 @@ use temper_worker_domain_world::protocol as worker_protocol;
 
 pub const GIT_BASE: &[u8] = b"http://forge.test";
 
-/// The hub's assignment beside the service's workspace and saved-work branch.
+/// The hub's assignment beside the service's workspace and per-repository saves.
 #[must_use]
-pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::Workspace, Option<Box<[u8]>>) {
+pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::Workspace) {
     let forges = [settings::Forge {
         mode: temper_engine_domain_forge::Mode::Connected,
         number: temper_engine_forge_world::REPO.forge,
@@ -44,7 +44,7 @@ pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::W
     }];
     let items = translate::items(assignment, &forges, &temper_service::forge::tokens::Tokens::empty(), &v1::CEILINGS)
         .expect("world workspace fits the payload");
-    let (repositories, save) = translate::workspace(items.as_ref());
+    let repositories = translate::workspace(items.as_ref());
     let workspace = items.map(|_| host::Workspace { workstream: assignment.workstream, items: Token::new(0) });
     let hub = host::Assignment {
         messages: messages(&assignment.messages),
@@ -54,14 +54,14 @@ pub fn assignment(assignment: &engine::Assignment) -> (host::Assignment, wire::W
             run: Token::new(assignment.task),
             attempt: Token::new(assignment.attempt),
             workspace,
-            save: save.is_some(),
+            save: assignment.run.policy.resume,
             charter: charter(assignment),
             grants: grants(&assignment.grants),
         },
         turns: assignment.transcript.clone(),
         answered: answered(&assignment.settled),
     };
-    (hub, repositories, save)
+    (hub, repositories)
 }
 
 /// The worker's parts through the service's channel records, without bytes.

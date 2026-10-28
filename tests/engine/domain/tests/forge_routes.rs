@@ -45,6 +45,9 @@ mod reviews;
 #[path = "forge_routes/b2_tree.rs"]
 mod b2_tree;
 
+#[path = "forge_routes/saved_retry.rs"]
+mod saved_retry;
+
 #[path = "forge_routes/goal_tool.rs"]
 mod goal_tool;
 

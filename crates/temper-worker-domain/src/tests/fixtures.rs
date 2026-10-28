@@ -127,6 +127,7 @@ pub fn items(names: &[&[u8]]) -> wire::Workspace {
     let mut repositories = List::with_capacity(u32::try_from(names.len()).expect("a few names"));
     for (tag, name) in names.iter().enumerate() {
         let repository = wire::Repository {
+            save: None,
             git: None,
             tag: u64::try_from(tag).expect("a few names"),
             name: Box::from(*name),
@@ -304,5 +305,5 @@ pub fn assignment_of(run: u64, names: &[&[u8]], messages: u64) -> crate::Event {
         inbox.push(message).expect("room for each message");
     }
     assignment.messages = inbox.into_boxed();
-    crate::Event::Assign { assignment, items: Ok(items(names)), save: None }
+    crate::Event::Assign { assignment, items: Ok(items(names)) }
 }

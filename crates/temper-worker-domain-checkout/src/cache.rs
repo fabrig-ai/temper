@@ -127,7 +127,13 @@ impl Cache {
             };
             self.idle.remove(&since);
             workspace.used = Use::Held;
-            if holds_exactly(&workspace.disk, repositories) {
+            // Restoring a saved commit starts with an empty directory. Local untracked
+            // leftovers never accompany the retained transcript into its saved tree.
+            let mut saved = false;
+            for repository in repositories {
+                saved |= repository.start.is_saved();
+            }
+            if !saved && holds_exactly(&workspace.disk, repositories) {
                 return Ok((id, Cached::Reused));
             }
             workspace.disk = Disk::Unknown;

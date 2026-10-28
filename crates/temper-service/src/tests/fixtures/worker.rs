@@ -3,6 +3,7 @@ use temper_worker_domain::wire;
 pub fn one_repository() -> wire::Workspace {
     wire::Workspace {
         repositories: Box::new([wire::Repository {
+            save: None,
             git: None,
             tag: temper_engine_domain_forge::tag(1, 3),
             name: b"app".as_slice().into(),
@@ -90,7 +91,15 @@ fn assigned(repository: bool) -> jig_protocol_worker_link::Request {
         )
         .unwrap();
         let mut fields = record.into_parts();
-        fields.save = Some(b"temper/saved-7".as_slice().into());
+        let mut repositories = skein_lib::List::with_capacity(1);
+        for repository in fields.repositories.into_boxed() {
+            let mut fields = repository.into_parts();
+            fields.save = Some(b"temper/saved-7".as_slice().into());
+            repositories
+                .push(temper_protocol_worker_wire::v1::Repository::new(&encoding.limits, fields).unwrap())
+                .unwrap();
+        }
+        fields.repositories = repositories;
         parts[0].bytes = temper_protocol_worker_wire::items(
             &temper_protocol_worker_wire::v1::Items::new(&encoding.limits, fields).unwrap(),
         );

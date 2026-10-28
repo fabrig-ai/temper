@@ -847,7 +847,7 @@ impl World {
                 self.observed.assignments += 1;
                 let repositories = usize::from(self.adoption != Adoption::Without);
                 assert_eq!(assignment.workspace.repositories.len(), repositories);
-                let (hub, items, save) = link::assignment(&assignment);
+                let (hub, items) = link::assignment(&assignment);
                 if self.run_watch.is_some() {
                     self.root_events.push_back(engine::Event::Party(engine::PartyInput::WatchRun {
                         watcher: RUN_WATCH,
@@ -857,7 +857,7 @@ impl World {
                         offset: 0,
                     }));
                 }
-                self.worker_events.push_back(worker::Event::Assign { assignment: hub, items: Ok(items), save });
+                self.worker_events.push_back(worker::Event::Assign { assignment: hub, items: Ok(items) });
                 self.assignment = Some(assignment);
             }
             Delivery::Link { channel, down } => {

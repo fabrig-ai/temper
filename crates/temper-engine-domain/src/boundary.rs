@@ -95,6 +95,8 @@ pub enum ForgeStart {
 /// One adopted repository translated for the worker's workspace.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ForgeRepository {
+    /// This task's saved-work branch, under this repository's prefix.
+    pub save: Option<Box<[u8]>>,
     pub tag: u64,
     pub provider: skein_forge::api::Repository,
     pub name: Box<[u8]>,

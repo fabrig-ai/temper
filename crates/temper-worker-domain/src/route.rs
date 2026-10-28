@@ -40,10 +40,10 @@ pub(crate) fn event(domain: &mut Domain, env: &Env<Limits>, event: Event, out: &
         Event::SourceAnswered { owner, answer } => {
             host_step(domain, env, host::Event::SourceAnswered { owner, answer });
         }
-        Event::Assign { assignment, items, save } => assign(domain, env, assignment, items, save, out),
+        Event::Assign { assignment, items } => assign(domain, env, assignment, items, out),
         Event::Link(host::LinkDown::Assign { assignment }) => {
             let items = wire::Workspace { repositories: Box::new([]) };
-            assign(domain, env, assignment, Ok(items), None, out);
+            assign(domain, env, assignment, Ok(items), out);
         }
         Event::Link(host::LinkDown::Acknowledge { run, attempt }) => {
             host_step(domain, env, host::Event::Down(host::LinkDown::Acknowledge { run, attempt }));
@@ -117,7 +117,6 @@ fn assign(
     env: &Env<Limits>,
     assignment: host::Assignment,
     items: Result<wire::Workspace, wire::Undecodable>,
-    save: Option<Box<[u8]>>,
     out: &mut Queue<Request>,
 ) {
     let (run, attempt) = (assignment.assignment.run, assignment.assignment.attempt);
@@ -139,7 +138,7 @@ fn assign(
     let checked = if !items.repositories.is_empty() && assignment.assignment.workspace.is_none() {
         Err(&b"workstream"[..])
     } else {
-        crate::assignment::check(&items, save.as_deref(), &env.limits)
+        crate::assignment::check(&items, &env.limits)
     };
     if let Err(why) = checked {
         let why = words(why, env.limits.host.detail_bytes);
@@ -150,7 +149,7 @@ fn assign(
             out,
         );
     }
-    match workspace::stage(domain, assignment, items, save) {
+    match workspace::stage(domain, assignment, items) {
         Some(assignment) => host_step(domain, env, host::Event::Down(host::LinkDown::Assign { assignment })),
         None => refuse(run, attempt, host::Refusal::Busy, out),
     }

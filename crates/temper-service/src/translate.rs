@@ -33,13 +33,14 @@ pub fn items(
     }
     let mut repositories = List::with_capacity(limits.items_repositories);
     for repository in &assignment.workspace.repositories {
-        let value = repository_item(repository, forges, tokens, limits)?;
+        let value = repository_item(repository, assignment.run.policy.resume, forges, tokens, limits)?;
         repositories.push(value).or(Err(problem(v1::Path::ItemsRepositories)))?;
     }
-    Ok(Some(v1::Items::new(limits, v1::ItemsParts { repositories, save: None })?))
+    Ok(Some(v1::Items::new(limits, v1::ItemsParts { repositories })?))
 }
 fn repository_item(
     repository: &engine::ForgeRepository,
+    save: bool,
     forges: &[settings::Forge],
     tokens: &crate::forge::tokens::Tokens,
     limits: &v1::Limits,
@@ -73,6 +74,7 @@ fn repository_item(
     v1::Repository::new(
         limits,
         v1::RepositoryParts {
+            save: if save { repository.save.clone() } else { None },
             tag: repository.tag,
             name: repository.name.clone(),
             remote: remote.finish(),
@@ -224,14 +226,14 @@ pub fn github_identity(
     Ok(wire::identity(&value))
 }
 
-/// The worker's decoded workspace and saved-work branch (protocol/channel.md, 7).
-pub type Assigned = (temper_worker_domain::wire::Workspace, Option<Box<[u8]>>);
+/// The worker's decoded workspace with per-repository saved-work branches (protocol/channel.md, 7).
+pub type Assigned = temper_worker_domain::wire::Workspace;
 
 /// Copy every workspace field from its channel record, or an empty workspace.
 #[must_use]
 pub fn workspace(items: Option<&v1::Items>) -> Assigned {
     use temper_worker_domain::wire as worker;
-    let Some(items) = items else { return (worker::Workspace { repositories: Box::new([]) }, None) };
+    let Some(items) = items else { return worker::Workspace { repositories: Box::new([]) } };
     let mut repositories = List::with_capacity(items.repositories().len());
     for repository in items.repositories() {
         let start = match repository.start() {
@@ -251,6 +253,7 @@ pub fn workspace(items: Option<&v1::Items>) -> Assigned {
         };
         repositories
             .push(worker::Repository {
+                save: repository.save().clone(),
                 tag: repository.tag(),
                 name: repository.name().into(),
                 remote: repository.remote().into(),
@@ -262,8 +265,7 @@ pub fn workspace(items: Option<&v1::Items>) -> Assigned {
             })
             .expect("one result per decoded repository");
     }
-    let save = items.save().clone();
-    (worker::Workspace { repositories: repositories.into_boxed() }, save)
+    worker::Workspace { repositories: repositories.into_boxed() }
 }
 
 /// What a run left and saved, field for field under the payload's ceilings.

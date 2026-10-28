@@ -37,7 +37,7 @@ pub fn limits(bounds: &Bounds) -> Option<v1::Limits> {
         branch_branch: bounds.name_bytes,
         writable_push: bounds.name_bytes,
         writable_landing_some: bounds.name_bytes,
-        items_save_some: bounds.name_bytes,
+        repository_save_some: bounds.name_bytes,
         repository_remote: bounds.remote_bytes,
         repository_git_some: v1::CEILINGS.repository_git_some,
         items_repositories: bounds.repositories,

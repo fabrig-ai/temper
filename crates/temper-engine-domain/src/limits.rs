@@ -420,7 +420,8 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
                     )?
                     .checked_add(u64::from(limits.tasks.saved_resources).checked_mul(8)?)?
                     // Connector Item.bytes bounds the whole selected workspace,
-                    // including optional landing names and repository containers.
+                    // including optional landing names and repository containers;
+                    // run_workspace also charges each optional save branch and its header.
                     .checked_add(u64::from(limits.journal.run_bytes))?
                     .checked_add(u64::from(limits.journal.transcript_bytes))?
                     .checked_add(List::<Box<[u8]>>::worst_case(limits.journal.transcript_bytes)?)?

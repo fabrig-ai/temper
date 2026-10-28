@@ -63,7 +63,7 @@ fn a_cancel_between_invocations_starts_no_further_one() {
     let mut component = fixtures::Started::new();
     component.down(Request::Io {
         owner: fixtures::OWNER,
-        op: git::Op::CheckOut { at: fixtures::at(), commit: fixtures::COMMIT },
+        op: git::Op::CheckOut { at: fixtures::at(), commit: fixtures::COMMIT, clean: true },
         deadline: fixtures::DEADLINE,
         identity: None,
     });

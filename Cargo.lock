@@ -2791,8 +2791,11 @@ dependencies = [
  "temper-engine-forge-world",
  "temper-engine-smith",
  "temper-fake",
+ "temper-fake-checkout",
  "temper-protocol-store",
  "temper-service",
+ "temper-worker-checkout-world",
+ "temper-worker-domain-checkout",
 ]
 
 [[package]]

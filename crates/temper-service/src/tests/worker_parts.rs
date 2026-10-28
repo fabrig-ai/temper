@@ -179,13 +179,13 @@ fn an_engine_s_items_reach_the_worker_s_workspace_field_for_field() {
         fields.repositories = repositories;
         let record = v1::Items::new(&limits, fields).unwrap();
         let parts = [Part { token: Token::new(9), bytes: payload::items(&record) }];
-        let (workspace, save) = worker_route::items(&fixtures::worker_assignment(), &parts, &limits).unwrap();
+        let workspace = worker_route::items(&fixtures::worker_assignment(), &parts, &limits).unwrap();
         let mut expected = fixtures::one_repository();
         expected.repositories[0].git = program;
+        expected.repositories[0].save = Some(b"temper/7/s7".as_slice().into());
         assert_eq!(workspace, expected);
-        assert_eq!(save, None);
     }
-    assert_eq!(translate::workspace(None), (wire::Workspace { repositories: Box::new([]) }, None));
+    assert_eq!(translate::workspace(None), wire::Workspace { repositories: Box::new([]) });
 }
 
 #[test]

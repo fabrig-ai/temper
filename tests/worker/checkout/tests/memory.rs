@@ -66,6 +66,7 @@ fn full_spec(limits: &Limits, n: u32) -> Spec {
     let mut repositories = Vec::new();
     for place in 0..limits.repositories {
         repositories.push(Repository {
+            save: Some(bytes(limits.name_bytes)),
             git: None,
             expected: None,
             landing: Some(bytes(limits.name_bytes)),
@@ -196,7 +197,7 @@ impl Fill {
     /// and leaves the save's first push in flight.
     fn save(&mut self, hold: Token, n: u32) {
         let limits = self.env.limits;
-        let save = Event::Save { hold, branch: bytes(limits.name_bytes), message: message(&limits) };
+        let save = Event::Save { hold, message: message(&limits) };
         assert_eq!(self.step(save)[..], [Asked::Io { op: Kind::Commit }]);
         let committed = Done::Committed { commit: commit(1_000_000 + n) };
         assert_eq!(self.done(hold, committed)[..], [Asked::Io { op: Kind::Push }], "the save's push is in flight");
@@ -236,11 +237,11 @@ fn fill(limits: Limits) {
     let name = u64::from(limits.name_bytes);
     let repositories = u64::from(limits.repositories);
     // Each workspace's key, twice, and its repositories' names and remotes;
-    // each hold's spec, five names a repository; and each live hold's save's
-    // message and branch.
+    // each hold's spec, six names a repository; and each live hold's save's
+    // message; the separate save branch has moved into each spec repository.
     let cache = 2 * name + repositories * 2 * name;
-    let spec = repositories * 5 * name;
-    let save = u64::from(limits.message_bytes) + name;
+    let spec = repositories * 6 * name;
+    let save = u64::from(limits.message_bytes);
     let least = u64::from(workspaces) * (cache + 2 * spec + save);
     assert!(held >= least, "{limits:?}: every workspace and hold holds its limits: {held} < {least}");
     fill.domain.reclaim();

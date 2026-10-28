@@ -117,7 +117,7 @@ pub fn perform(forge: &mut impl Remote, disk: &mut Checkout, op: Op) -> Done {
                 Err(fault) => failed(fault),
             }
         }
-        Op::CheckOut { at, commit } => {
+        Op::CheckOut { at, commit, .. } => {
             assert_cloned(disk, &at);
             let checked_out = git::check_out(forge, disk, &path(&at), fake(commit));
             checked_out.expect("a checkout is of a commit fetched into the repository");

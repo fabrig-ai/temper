@@ -11,14 +11,9 @@ use temper_worker_domain_checkout as checkout;
 use crate::Limits;
 use crate::wire::{Access, Repository, Start, Workspace};
 
-/// Whether the workspace `items` and the saved-work branch `save` fit
+/// Whether the workspace `items` and each saved-work branch fit
 /// `limits`, and the words for what does not.
-pub(crate) fn check(items: &Workspace, save: Option<&[u8]>, limits: &Limits) -> Result<(), &'static [u8]> {
-    if let Some(branch) = save
-        && !name(branch, limits)
-    {
-        return Err(b"save branch");
-    }
+pub(crate) fn check(items: &Workspace, limits: &Limits) -> Result<(), &'static [u8]> {
     let count = u64::try_from(items.repositories.len()).expect("a length fits in a u64");
     if count > u64::from(limits.checkout.repositories) {
         return Err(b"too many repositories");
@@ -38,6 +33,11 @@ pub(crate) fn check(items: &Workspace, save: Option<&[u8]>, limits: &Limits) -> 
 }
 
 fn repository(repository: &Repository, limits: &Limits) -> Result<(), &'static [u8]> {
+    if let Some(branch) = &repository.save
+        && !name(branch, limits)
+    {
+        return Err(b"save branch");
+    }
     if !name(&repository.name, limits) || !component(&repository.name) {
         return Err(b"repository name");
     }

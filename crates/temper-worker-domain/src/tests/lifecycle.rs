@@ -21,7 +21,7 @@ fn sent_start(rows: &[Request]) -> &agent::Start {
 #[test]
 fn a_run_with_no_repository_starts_smith_with_no_workspace() {
     let mut h = Harness::new();
-    let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(items(&[])), save: None };
+    let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(items(&[])) };
     let rows = h.run(assign);
     let start = sent_start(&rows);
     assert_eq!((start.workspace, start.directories.len()), (None, 0));
@@ -41,7 +41,7 @@ fn only_the_llm_accounts_grants_reach_smith() {
         let mut llm = grant(host::GrantTable::Accounts, 1);
         llm.form = form;
         let grants = Box::new([llm, grant(host::GrantTable::Application, 7)]);
-        let assign = Event::Assign { assignment: assignment(true, grants), items: Ok(items(&[])), save: None };
+        let assign = Event::Assign { assignment: assignment(true, grants), items: Ok(items(&[])) };
         let rows = h.run(assign);
         let expected =
             agent::Grant { account: llm.account, generation: llm.generation, valid: llm.valid, form: expected_form };

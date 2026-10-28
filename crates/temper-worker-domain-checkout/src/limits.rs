@@ -48,7 +48,7 @@ pub struct Limits {
 /// the workspace and in the index of keys) and the names and remotes of the
 /// repositories it holds. Each hold owns its spec's repositories, where each stands, and,
 /// while it pushes or saves, the outcomes so far, the message and the
-/// saved-work branch; a hold released in an iteration holds them until the
+/// saved-work destinations in its repository specs; a hold released in an iteration holds them until the
 /// reclaim point. It counts the containers, their bookkeeping included, and
 /// the payloads, not allocator overhead. The copies that go out in requests
 /// are their receivers' to count. Facts own nothing beyond their queue.
@@ -68,13 +68,13 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
     let hold_slots = holds(limits)?;
     let holds = Slab::<Hold>::worst_case(hold_slots)?;
     // A repository's name, remote, starting branch, push branch and landing
-    // branch, plus its program. Inline fields are in List<Repository>.
-    let repository = name.checked_mul(5)?.checked_add(u64::from(PROGRAM_BYTES))?;
+    // branch and its save branch, plus its program. Inline fields are in List<Repository>.
+    // Saves retain no separate branch; Tips additionally records an optional delivery
+    // baseline and whether this hold delivered it (both priced by List<Tips>).
+    let repository = name.checked_mul(6)?.checked_add(u64::from(PROGRAM_BYTES))?;
     let spec = List::<Repository>::worst_case(limits.repositories)?
         .checked_add(u64::from(limits.repositories).checked_mul(repository)?)?;
-    let push = List::<Landing>::worst_case(limits.repositories)?
-        .checked_add(u64::from(limits.message_bytes))?
-        .checked_add(name)?;
+    let push = List::<Landing>::worst_case(limits.repositories)?.checked_add(u64::from(limits.message_bytes))?;
     let paths = List::<Box<[u8]>>::worst_case(limits.conflicts)?
         .checked_add(u64::from(limits.conflicts).checked_mul(u64::from(limits.path_bytes))?)?;
     let path_sets = u64::from(limits.repositories).checked_mul(paths)?;

@@ -176,6 +176,7 @@ fn bytes(text: &[u8]) -> Box<[u8]> {
 fn repository(name: &[u8], writable: bool) -> Repository {
     let push = if writable { Some(bytes(b"main")) } else { None };
     Repository {
+        save: Some(bytes(b"saved/1")),
         git: None,
         name: bytes(name),
         remote: remote(name),
@@ -290,12 +291,12 @@ fn a_new_workspace_is_made_then_each_repository_cloned_fetched_and_checked_out()
     let fetch_a =
         Op::Fetch { at: place(workspace, b"a"), remote: remote(b"a"), want: want_main(), identity, account: None };
     assert_eq!(h.next(hold, Done::Succeeded), fetch_a);
-    let check_out_a = Op::CheckOut { at: place(workspace, b"a"), commit: commit(1) };
+    let check_out_a = Op::CheckOut { at: place(workspace, b"a"), commit: commit(1), clean: true };
     assert_eq!(h.next(hold, Done::Fetched { commit: commit(1) }), check_out_a);
     let fetch_b =
         Op::Fetch { at: place(workspace, b"b"), remote: remote(b"b"), want: want_main(), identity, account: None };
     assert_eq!(h.next(hold, Done::Succeeded), fetch_b);
-    let check_out_b = Op::CheckOut { at: place(workspace, b"b"), commit: commit(2) };
+    let check_out_b = Op::CheckOut { at: place(workspace, b"b"), commit: commit(2), clean: true };
     assert_eq!(h.next(hold, Done::Fetched { commit: commit(2) }), check_out_b);
     let ready = h.one(Event::Done { owner: hold, done: Done::Succeeded });
     assert_eq!(
@@ -445,7 +446,7 @@ fn a_missing_base_branch_is_created_from_the_default_branch() {
     };
     assert_eq!(create, expected, "created at the default branch's tip");
     let check_out = h.next(hold, Done::Succeeded);
-    assert_eq!(check_out, Op::CheckOut { at, commit: commit(9) });
+    assert_eq!(check_out, Op::CheckOut { at, commit: commit(9), clean: true });
     let ready = prepared(h.one(Event::Done { owner: hold, done: Done::Succeeded }));
     let Prepared::Ready { .. } = ready else { panic!("ready: {ready:?}") };
 }
@@ -677,7 +678,7 @@ fn a_retry_keeps_a_stronger_expected_and_verifies_an_ambiguous_push() {
         &[Landing::Landed { commit: commit(1) }]
     );
     // Saving keeps the actual start baseline even after retry delivery.
-    h.one(Event::Save { hold, branch: bytes(b"saved"), message: message() });
+    h.one(Event::Save { hold, message: message() });
     assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
     // A later real edit follows the normal commit/push path, with no comparison.
     h.one(Event::Push { hold, message: message() });
@@ -710,7 +711,6 @@ fn supplied_landing_cannot_invent_eligibility_or_change_saved_semantics() {
         Start::Base { branch: bytes(b"main") },
         Start::Branch { branch: bytes(b"elsewhere") },
         Start::Commit { commit: commit(1) },
-        Start::Saved { branch: bytes(b"saved") },
         Start::Merge { branch: bytes(b"main"), base: commit(7) },
     ] {
         let mut h = Harness::new(MERGES);
@@ -725,7 +725,7 @@ fn supplied_landing_cannot_invent_eligibility_or_change_saved_semantics() {
             assert_eq!(h.next(hold, Done::Committed { commit: commit(11) }).kind(), Kind::Push);
         } else {
             assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
-            h.one(Event::Save { hold, branch: bytes(b"saved"), message: message() });
+            h.one(Event::Save { hold, message: message() });
             assert_eq!(&*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })), &[Landing::Unchanged]);
         }
         assert!(
@@ -811,13 +811,13 @@ fn a_save_pushes_to_the_saved_work_branch_what_changed_since_the_start() {
     let mut h = Harness::new(LIMITS);
     let hold = h.ready(1, one(b"w"));
     // Nothing changed: nothing to save.
-    h.one(Event::Save { hold, branch: bytes(b"saved/1"), message: message() });
+    h.one(Event::Save { hold, message: message() });
     let end = h.one(Event::Done { owner: hold, done: Done::Unchanged });
     assert_eq!(
         end,
         Request::Saved { client: Token::new(1), outcome: Outcome::Pushed { landings: Box::new([Landing::Unchanged]) } }
     );
-    h.one(Event::Save { hold, branch: bytes(b"saved/1"), message: message() });
+    h.one(Event::Save { hold, message: message() });
     let push = h.next(hold, Done::Committed { commit: commit(11) });
     let Op::Push { commit: pushed, branch, .. } = push else { panic!("a push: {push:?}") };
     assert_eq!((pushed, &*branch), (commit(11), &b"saved/1"[..]));
@@ -838,7 +838,7 @@ fn a_push_or_a_save_beyond_the_limits_is_refused() {
     assert_eq!(refused(h.one(Event::Push { hold, message: long })), Refusal::Invalid);
     let untitled = Message { title: bytes(b""), body: bytes(b"x") };
     assert_eq!(refused(h.one(Event::Push { hold, message: untitled })), Refusal::Invalid);
-    let save = Event::Save { hold, branch: bytes(&[b'x'; 17]), message: message() };
+    let save = Event::Save { hold, message: Message { title: bytes(b"t"), body: bytes(&[b'x'; 64]) } };
     assert_eq!(refused(h.one(save)), Refusal::Invalid);
     // Still ready.
     assert_eq!(io(h.one(Event::Push { hold, message: message() }), hold).kind(), Kind::Commit);
@@ -852,7 +852,7 @@ fn a_push_while_another_operation_is_under_way_is_refused() {
     let mut h = Harness::new(LIMITS);
     let hold = h.ready(1, one(b"w"));
     h.one(Event::Push { hold, message: message() });
-    let save = Event::Save { hold, branch: bytes(b"saved/1"), message: message() };
+    let save = Event::Save { hold, message: message() };
     assert_eq!(refused(h.one(save)), Refusal::Busy);
     // The push goes on.
     assert_eq!(h.next(hold, Done::Committed { commit: commit(11) }).kind(), Kind::Push);
@@ -889,7 +889,7 @@ fn an_abort_mid_push_waits_for_the_push_keeps_what_landed_and_reports_the_rest_a
     let end = h.one(Event::Done { owner: hold, done: Done::Succeeded });
     assert_eq!(&*landings(end), &[Landing::Landed { commit: commit(11) }, Landing::Aborted]);
     // Ready again: a save goes ahead.
-    let save = h.one(Event::Save { hold, branch: bytes(b"saved/1"), message: message() });
+    let save = h.one(Event::Save { hold, message: message() });
     assert_eq!(io(save, hold).kind(), Kind::Commit);
     // An abort while committing pushes nothing, whether the commit was made
     // or cancelled.
@@ -1049,7 +1049,7 @@ fn a_released_hold_is_stale() {
     let hold = h.ready(1, one(b"w"));
     h.one(Event::Release { hold });
     h.none(Event::Push { hold, message: message() });
-    h.none(Event::Save { hold, branch: bytes(b"s"), message: message() });
+    h.none(Event::Save { hold, message: message() });
     h.none(Event::Abort { hold });
     h.none(Event::Release { hold });
     // Not even once the workspace is held again.
@@ -1334,4 +1334,67 @@ fn assert_account(op: Op, expected: Option<u64>, kind: Kind) {
             panic!("an operation that authenticates")
         }
     }
+}
+
+fn prepare_with_save(length: u32) -> List<Request> {
+    let mut spec = one(b"w");
+    spec.repositories[0].save = Some(skein_lib::bytes::zeroed(usize::try_from(length).expect("bounded")));
+    Harness::new(LIMITS).step(Event::Prepare { client: Token::new(1), spec })
+}
+
+#[test]
+fn a_saved_work_destination_at_its_name_bound_is_admitted() {
+    let requests = prepare_with_save(LIMITS.name_bytes);
+    let [Request::Held { .. }, Request::Io { .. }] = requests.as_slice() else { panic!("admitted: {requests:?}") };
+}
+
+#[test]
+fn a_saved_work_destination_past_its_name_bound_is_refused() {
+    assert_eq!(
+        prepare_with_save(LIMITS.name_bytes + 1).as_slice(),
+        &[Request::Prepared { client: Token::new(1), prepared: Prepared::Refused { refusal: Refusal::Invalid } }]
+    );
+}
+
+#[test]
+fn a_saved_producer_delivers_before_its_delivery_branch_exists() {
+    let mut h = Harness::new(LIMITS);
+    let mut spec = one(b"w");
+    spec.repositories[0].start = Start::Saved { branch: bytes(b"saved/1") };
+    let (hold, _) = h.prepare(1, spec);
+    h.next(hold, Done::Succeeded); // make -> clone
+    h.next(hold, Done::Succeeded); // clone -> saved fetch
+    h.next(hold, Done::Fetched { commit: commit(9) }); // saved -> delivery branch fetch
+    let op = h.next(hold, failed(Fault::Missing { missing: Missing::Branch }));
+    let Op::CheckOut { clean, .. } = op else { panic!("saved checkout") };
+    assert!(!clean);
+    h.one(Event::Done { owner: hold, done: Done::Succeeded });
+    h.one(Event::Push { hold, message: message() });
+    let op = h.next(hold, Done::Unchanged);
+    let Op::Push { commit: head, branch, expected, .. } = op else { panic!("restored tree has a push") };
+    assert_eq!((head, branch.as_ref(), expected), (commit(9), b"main".as_slice(), None));
+}
+
+#[test]
+fn a_saved_head_already_on_its_push_branch_delivers_with_a_guard() {
+    let mut h = Harness::new(LIMITS);
+    let repo = Repository { start: Start::Saved { branch: bytes(b"saved") }, ..retry_repository() };
+    let hold = h.ready(1, spec(b"w", Box::new([repo])));
+    h.one(Event::Push { hold, message: message() });
+    let op = h.next(hold, Done::Unchanged);
+    let Op::Push { commit: head, expected, .. } = op else { panic!("saved work is pushed before returning a landing") };
+    assert_eq!((head, expected), (commit(1), Some(commit(1))));
+    assert_eq!(
+        &*landings(h.one(Event::Done { owner: hold, done: Done::Succeeded })),
+        &[Landing::Landed { commit: commit(1) }]
+    );
+    assert!(
+        !h.facts().as_slice().contains(&Fact::Started { client: Token::new(1), op: Kind::IsAncestor }),
+        "a saved start uses no producer comparison"
+    );
+    h.one(Event::Push { hold, message: message() });
+    assert_eq!(
+        &*landings(h.one(Event::Done { owner: hold, done: Done::Unchanged })),
+        &[Landing::Landed { commit: commit(1) }]
+    );
 }

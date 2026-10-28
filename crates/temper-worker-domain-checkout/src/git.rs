@@ -76,7 +76,7 @@ pub enum Op {
     /// Make the repository's working tree exactly `commit`'s tree: what is not
     /// in it is removed, including untracked nested repositories. HEAD is
     /// detached at commit, and the merge state is cleared.
-    CheckOut { at: Place, commit: Commit },
+    CheckOut { at: Place, commit: Commit, clean: bool },
     /// Whether fetched ancestor is contained in commit, including equality. Local and read-only.
     IsAncestor { at: Place, ancestor: Commit, commit: Commit },
     /// Merge fetched `theirs` into the checked-out commit, without committing;

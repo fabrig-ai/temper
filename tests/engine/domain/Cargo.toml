@@ -42,6 +42,9 @@ smith-domain-session.workspace = true
 smith-domain-tools.workspace = true
 
 [dev-dependencies]
+temper-worker-domain-checkout.workspace = true
+temper-worker-checkout-world.workspace = true
+temper-fake-checkout.workspace = true
 skein-fake-llm-domain.workspace = true
 temper-fake.workspace = true
 serde_json.workspace = true

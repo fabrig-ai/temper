@@ -83,7 +83,7 @@ pub fn after(
                 return next;
             }
         }
-        Command::CheckOut { .. } if code == 0 => return Next::Run(Command::Clean),
+        Command::CheckOut { .. } if code == 0 => return checked_out(op),
         Command::Merge { .. } => match code {
             0 => return Next::End(git::Done::Merged),
             1 => return Next::Run(Command::Unmerged),
@@ -223,5 +223,20 @@ fn commit_tree(op: &git::Op, stdout: &[u8]) -> Option<Command> {
         | git::Op::IsAncestor { .. }
         | git::Op::Merge { .. }
         | git::Op::Push { .. } => None,
+    }
+}
+
+fn checked_out(op: &git::Op) -> Next {
+    match op {
+        git::Op::CheckOut { clean: false, .. } => Next::End(git::Done::Succeeded),
+        git::Op::CheckOut { clean: true, .. }
+        | git::Op::Make { .. }
+        | git::Op::Clone { .. }
+        | git::Op::Fetch { .. }
+        | git::Op::Create { .. }
+        | git::Op::IsAncestor { .. }
+        | git::Op::Merge { .. }
+        | git::Op::Commit { .. }
+        | git::Op::Push { .. } => Next::Run(Command::Clean),
     }
 }

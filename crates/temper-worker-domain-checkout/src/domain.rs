@@ -84,7 +84,7 @@ pub fn step(domain: &mut Domain, env: &Env<Limits>, event: Event, out: &mut Queu
     match event {
         Event::Prepare { client, spec } => hold::prepare(domain, env, client, spec, out),
         Event::Push { hold, message } => hold::push(domain, env, hold, message, out),
-        Event::Save { hold, branch, message } => hold::save(domain, env, hold, branch, message, out),
+        Event::Save { hold, message } => hold::save(domain, env, hold, message, out),
         Event::Abort { hold } => hold::abort(domain, hold, out),
         Event::Release { hold } => hold::release(domain, hold, out),
         Event::Done { owner, done } => hold::done(domain, env, owner, done, out),

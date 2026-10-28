@@ -128,8 +128,7 @@ pub fn github_assignment(account: Option<u64>) -> jig_protocol_worker_link::Requ
     let mut repository = items.repositories.get(0).unwrap().clone().into_parts();
     repository.account = account;
     repositories.push(v1::Repository::new(&limits, repository).unwrap()).unwrap();
-    parts[0].bytes =
-        payload::items(&v1::Items::new(&limits, v1::ItemsParts { repositories, save: items.save }).unwrap());
+    parts[0].bytes = payload::items(&v1::Items::new(&limits, v1::ItemsParts { repositories }).unwrap());
     jig_protocol_worker_link::Request::Down { down, parts }
 }
 

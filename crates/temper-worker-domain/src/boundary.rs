@@ -59,10 +59,10 @@ pub enum Event {
     /// Terminal of one source command, correlated by its request owner.
     SourceAnswered { owner: Token, answer: host::sources::Answer },
     /// From the engine: an assignment, jig's record, with temper's workspace
-    /// items and the saved-work branch beside it (jig's `protocol/channel.md`,
+    /// items with their per-repository saved-work branches (jig's `protocol/channel.md`,
     /// 6.2). The record's workspace, if it has one, names the workstream the
     /// checkout is keyed by; the root names the items to the hub itself.
-    Assign { assignment: host::Assignment, items: Result<wire::Workspace, wire::Undecodable>, save: Option<Box<[u8]>> },
+    Assign { assignment: host::Assignment, items: Result<wire::Workspace, wire::Undecodable> },
     /// From the engine: any other record of jig's link. An assignment here
     /// has no workspace items.
     Link(host::LinkDown),

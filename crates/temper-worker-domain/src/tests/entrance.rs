@@ -10,8 +10,7 @@ use skein_lib::Duration;
 #[test]
 fn workspace_items_that_did_not_decode_are_refused_naming_them() {
     let mut h = Harness::new();
-    let assign =
-        Event::Assign { assignment: assignment(true, Box::new([])), items: Err(crate::wire::Undecodable), save: None };
+    let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Err(crate::wire::Undecodable) };
     assert_eq!(&*h.step(assign), [refused(b"workspace items")]);
     assert_eq!(h.domain.host().hosted(), 0);
 }
@@ -39,11 +38,11 @@ fn workspace_items_are_refused_naming_the_item_or_carry_their_program_to_checkou
             None => None,
         };
         if let Some(why) = why {
-            let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(workspace), save: None };
+            let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(workspace) };
             assert_eq!(&*h.step(assign), [refused(why)], "{row}");
             assert_eq!(h.domain.host().hosted(), 0, "{row}");
         } else {
-            assert_eq!(crate::assignment::check(&workspace, None, &h.env.limits), Ok(()), "{row}");
+            assert_eq!(crate::assignment::check(&workspace, &h.env.limits), Ok(()), "{row}");
             let spec = translate::spec(7, workspace);
             assert_eq!(
                 spec.repositories.first().expect("one repository").git.as_deref(),
@@ -57,7 +56,7 @@ fn workspace_items_are_refused_naming_the_item_or_carry_their_program_to_checkou
 #[test]
 fn workspace_items_without_a_workstream_are_refused_as_an_invalid_start() {
     let mut h = Harness::new();
-    let assign = Event::Assign { assignment: assignment(false, Box::new([])), items: Ok(items(&[b"app"])), save: None };
+    let assign = Event::Assign { assignment: assignment(false, Box::new([])), items: Ok(items(&[b"app"])) };
     assert_eq!(&*h.step(assign), [refused(b"workstream")]);
 }
 
@@ -165,12 +164,12 @@ fn landing_branch_is_bounded_and_translated_to_checkout() {
             landing: Some(skein_lib::bytes::zeroed(length)),
         };
         if length == 32 {
-            assert_eq!(crate::assignment::check(&workspace, None, &h.env.limits), Ok(()));
+            assert_eq!(crate::assignment::check(&workspace, &h.env.limits), Ok(()));
             let spec = translate::spec(7, workspace);
             assert_eq!(spec.repositories[0].landing.as_ref().unwrap().len(), length);
             assert_eq!(spec.repositories[0].expected.unwrap().raw(), [1; 32]);
         } else {
-            let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(workspace), save: None };
+            let assign = Event::Assign { assignment: assignment(true, Box::new([])), items: Ok(workspace) };
             assert_eq!(&*h.step(assign), [refused(b"landing branch")]);
         }
     }

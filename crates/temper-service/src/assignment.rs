@@ -113,7 +113,7 @@ pub fn down(
                     run: Token::new(assignment.task),
                     attempt: Token::new(assignment.attempt),
                     workspace,
-                    save: false,
+                    save: assignment.run.policy.resume,
                     charter,
                     grants,
                 },

@@ -42,9 +42,9 @@ pub enum Event {
     /// exactly as it is, and push it to the repository's push branch.
     /// Answered by exactly one `Pushed`.
     Push { hold: Token, message: Message },
-    /// The same, to the saved-work branch `branch` of each writable
+    /// The same, to the saved-work destination of each writable
     /// repository. Answered by exactly one `Saved`.
-    Save { hold: Token, branch: Box<[u8]>, message: Message },
+    Save { hold: Token, message: Message },
     /// End the prepare, push or save under way for `hold` once the operation
     /// in flight has settled, without starting another: its answer says it
     /// was aborted, and nothing touches the workspace afterwards. A prepare's
@@ -96,6 +96,8 @@ pub struct Spec {
 /// A repository of a spec.
 #[derive(PartialEq, Eq, Debug)]
 pub struct Repository {
+    /// This task's saved-work branch, under this repository's prefix.
+    pub save: Option<Box<[u8]>>,
     /// Its directory in the workspace, beside the others': one path
     /// component, so neither empty, `.` nor `..`, without `/` or NUL, and not
     /// `.git` in any case.
@@ -240,4 +242,13 @@ pub enum Landing {
     /// flight is never cancelled: the repository it is pushing when they come
     /// has its own landing, and those after it are aborted.
     Aborted,
+}
+
+impl Start {
+    pub(crate) const fn is_saved(&self) -> bool {
+        match self {
+            Self::Saved { .. } => true,
+            Self::Base { .. } | Self::Branch { .. } | Self::Commit { .. } | Self::Merge { .. } => false,
+        }
+    }
 }

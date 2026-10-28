@@ -75,3 +75,24 @@ fn a_host_answer_past_the_agents_reply_bound_reaches_it_as_too_large() {
         assert_eq!(host_answer(92, REPLY_BYTES + 1, error), smith_channel::Reply::TooLarge);
     }
 }
+
+#[test]
+fn a_saved_retry_delivers_the_file_written_before_its_run_ended() {
+    let report = temper_worker_domain_world::whole::retry(109, true);
+    let expected =
+        [(b"code".to_vec(), b"original\n".to_vec()), (b"changes/3.md".to_vec(), b"repair kept\n".to_vec())].into();
+    assert_eq!(report.tree, expected);
+    assert_eq!(report.saves, 1);
+}
+
+#[test]
+fn a_run_starting_fresh_from_its_brief_starts_clean() {
+    let report = temper_worker_domain_world::whole::retry(110, false);
+    assert_eq!(report.tree, [(b"code".to_vec(), b"original\n".to_vec())].into());
+    assert_eq!(report.saves, 0);
+}
+
+#[test]
+fn a_landed_change_saves_nothing() {
+    assert_eq!(run(111, Case::Delivered).saves, 0);
+}

@@ -27,6 +27,7 @@ pub fn repository_parts(tag: u64, remote: Box<[u8]>) -> v1::RepositoryParts {
     )
     .expect("push branch");
     v1::RepositoryParts {
+        save: None,
         tag,
         name: Box::from(&b"shop"[..]),
         remote,
@@ -49,7 +50,7 @@ pub fn items(count: u32) -> v1::ItemsParts {
         .expect("repository");
         repositories.push(repository).expect("counted room");
     }
-    v1::ItemsParts { repositories, save: None }
+    v1::ItemsParts { repositories }
 }
 
 pub fn identity(token: &[u8]) -> v1::Identity {

@@ -462,6 +462,7 @@ impl World {
 
     fn assign(&mut self) {
         let repository = wire::Repository {
+            save: Some(Box::from(&b"saved"[..])),
             git: None,
             tag: 19,
             name: Box::from(&b"app"[..]),
@@ -491,7 +492,7 @@ impl World {
             },
         };
         let items = wire::Workspace { repositories: Box::new([repository]) };
-        self.send(Event::Assign { assignment, items: Ok(items), save: Some(Box::from(&b"saved"[..])) });
+        self.send(Event::Assign { assignment, items: Ok(items) });
     }
 
     /// One turn of the run, numbered `number`: the engine answers it busy

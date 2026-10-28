@@ -485,6 +485,10 @@ impl World {
 
     /// The client sends its prepare, for a spec drawn from its plan and what
     /// the forge has.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one prepare selects each repository and its start and save destinations"
+    )]
     fn prepare(&mut self, name: u64) {
         let plan = self.client(name).plan;
         let workstream = usize::try_from(plan.workstream).expect("small");
@@ -539,6 +543,7 @@ impl World {
             };
             let push = if writable { Some(base.clone().into()) } else { None };
             let spec = Repository {
+                save: Some(saved.clone().into()),
                 git: None,
                 expected: None,
                 landing: None,
@@ -569,6 +574,7 @@ impl World {
             match self.rng.below(7) {
                 0 => key = Vec::new(),
                 1 => repositories.push(Repository {
+                    save: Some(saved.clone().into()),
                     git: None,
                     expected: None,
                     landing: None,
@@ -670,7 +676,6 @@ impl World {
         let client = self.clients.get(&name).expect("a client submitted");
         let workspace = client.workspace.expect("a client pushes a workspace it has ready");
         let hold = client.hold.expect("a client pushes what it holds");
-        let workstream = client.plan.workstream;
         let mut left = Vec::new();
         for repo in &client.repos {
             left.push(self.tree(workspace, &repo.name));
@@ -679,8 +684,7 @@ impl World {
         let client = self.clients.get_mut(&name).expect("a client submitted");
         client.left = left;
         let (event, operation) = if save {
-            let branch = format!("saved/{workstream}").into_bytes().into();
-            (Event::Save { hold, branch, message: message() }, Operation::Save)
+            (Event::Save { hold, message: message() }, Operation::Save)
         } else {
             (Event::Push { hold, message: message() }, Operation::Push)
         };
@@ -688,11 +692,8 @@ impl World {
         self.stage.push(event);
         if twice {
             client.refusals += 1;
-            let again = if save {
-                Event::Save { hold, branch: format!("saved/{workstream}").into_bytes().into(), message: message() }
-            } else {
-                Event::Push { hold, message: message() }
-            };
+            let again =
+                if save { Event::Save { hold, message: message() } } else { Event::Push { hold, message: message() } };
             self.stage.push(again);
             self.stats.busy_pushes += 1;
         }
@@ -820,11 +821,10 @@ impl World {
         client.start = start;
         // Another party may advance a push branch meanwhile.
         if self.rng.chance(self.settings.advance) {
-            let workstream = client.plan.workstream;
             let repo = client.repos.iter().find(|repo| repo.writable).expect("a spec's first repository is writable");
             let delivery = Delivery::Advance {
                 repository: repo.remote.clone(),
-                branch: format!("base/{workstream}").into_bytes(),
+                branch: format!("base/{}", client.plan.workstream).into_bytes(),
             };
             let at = self.now.saturating_add(self.settings.think.draw(&mut self.rng));
             self.schedule(at, delivery);
@@ -1095,7 +1095,7 @@ impl World {
             self.forge.set_refusing(name, refusing);
         }
         match &op {
-            Op::CheckOut { at, commit } => {
+            Op::CheckOut { at, commit, .. } => {
                 self.checked_out.insert((owner, at.repository.to_vec()), translate::fake(*commit));
             }
             Op::Make { .. }

@@ -143,7 +143,7 @@ fn an_assignment_carries_its_items_encoded_charter_and_identity_value() {
         assignment.assignment.identity,
         [118, 213, 170, 119, 186, 221, 240, 223, 121, 163, 222, 185, 198, 157, 28, 125]
     );
-    assert!(!assignment.assignment.save);
+    assert!(assignment.assignment.save);
     let workspace = assignment.assignment.workspace.unwrap();
     assert_eq!(workspace.workstream, 7);
     assert_eq!(workspace.items, parts[0].token);
@@ -579,4 +579,28 @@ fn a_program_grants_charter_keeps_its_source_account() {
     let charter = decoded_charter(&sent.assignment.charter);
     assert_eq!(charter.main().account(), &Some(17));
     assert_eq!(charter.main().endpoint(), b"fake");
+}
+
+#[test]
+fn a_first_attempt_requests_saves_from_its_charters_resume_policy() {
+    let settings = fixtures::engine();
+    let encoding = fixtures::encoding(&settings);
+    let values = fixtures::values_with_identity(1, b"forge-token");
+    for resume in [false, true] {
+        let mut run = fixtures::assignment_with(fixtures::repository(7, b"acme", b"shop"));
+        run.run.policy.resume = resume;
+        let jig_protocol_engine_workers::Event::Down { down: host::LinkDown::Assign { assignment }, parts, .. } =
+            crate::assignment::down(run, &settings.forges, &encoding, &values, Token::new(8), Time::ZERO).unwrap()
+        else {
+            panic!("assignment")
+        };
+        let items = temper_protocol_worker_wire::v1::Items::decode(
+            &encoding.limits,
+            &mut skein_lib::Reader::new(&parts[0].bytes),
+        )
+        .unwrap();
+        assert_eq!(assignment.assignment.save, resume);
+        assert_eq!(items.repositories().get(0).unwrap().save().is_some(), resume);
+        assert!(!decoded_charter(&assignment.assignment.charter).resume(), "the first attempt has no transcript yet");
+    }
 }

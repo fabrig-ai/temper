@@ -130,8 +130,16 @@ pub fn operations() -> Vec<(&'static str, Scenario)> {
         (
             "checkout",
             scenario(
-                git::Op::CheckOut { at: at(), commit: ONE },
+                git::Op::CheckOut { at: at(), commit: ONE, clean: true },
                 &["checkout-1", "checkout-2"],
+                Expected::done(git::Done::Succeeded),
+            ),
+        ),
+        (
+            "saved checkout",
+            scenario(
+                git::Op::CheckOut { at: at(), commit: ONE, clean: false },
+                &["checkout-1"],
                 Expected::done(git::Done::Succeeded),
             ),
         ),

@@ -66,7 +66,6 @@ use crate::translate;
 pub(crate) struct Items {
     workstream: u64,
     spec: Option<wire::Workspace>,
-    save: Option<Box<[u8]>>,
     tags: Box<[u64]>,
     from_saved: Box<[bool]>,
     landed: Map<u64, [u8; 32]>,
@@ -87,8 +86,7 @@ pub(crate) struct Items {
 pub(crate) fn stage(
     domain: &mut Domain,
     mut assignment: host::Assignment,
-    items: wire::Workspace,
-    save: Option<Box<[u8]>>,
+    mut items: wire::Workspace,
 ) -> Option<host::Assignment> {
     let run = &mut assignment.assignment;
     if items.repositories.is_empty() {
@@ -107,7 +105,17 @@ pub(crate) fn stage(
             | wire::Start::Saved { .. } => {}
         }
     }
-    let save = if run.save && !merging { save } else { None };
+    let mut saving = false;
+    for repository in &mut items.repositories {
+        let writable = match repository.access {
+            wire::Access::Writable { .. } => true,
+            wire::Access::ReadOnly => false,
+        };
+        if !run.save || merging || !writable {
+            repository.save = None;
+        }
+        saving |= repository.save.is_some();
+    }
     let count = u32::try_from(items.repositories.len()).expect("checked item count");
     let mut tags = List::with_capacity(count);
     let mut from_saved = List::with_capacity(count);
@@ -122,11 +130,9 @@ pub(crate) fn stage(
         };
         from_saved.push(saved).expect("room for each item start");
     }
-    let saving = save.is_some();
     let entry = Items {
         workstream,
         spec: Some(items),
-        save,
         tags: tags.into_boxed(),
         from_saved: from_saved.into_boxed(),
         landed: Map::with_capacity(count),
@@ -313,17 +319,14 @@ pub(crate) fn write(domain: &mut Domain, env: &Env<Limits>, owner: Token, worksp
 
 /// Save through the application's checkout using the branch kept with its items.
 pub(crate) fn save(domain: &mut Domain, env: &Env<Limits>, owner: Token, workspace: Token) {
-    let record = domain.workspaces.get(Id::<Workspace>::from_token(workspace)).expect("a prepared workspace is live");
-    let items = domain.items.get_mut(&record.items).expect("its items remain staged");
-    let branch = items.save.take().expect("the host saves only when requested");
-    write(domain, env, owner, workspace, Write::Save { branch });
+    write(domain, env, owner, workspace, Write::Save);
 }
 
 /// A push or a save, as the host asks it.
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub(crate) enum Write {
     Push { title: Box<[u8]>, body: Box<[u8]> },
-    Save { branch: Box<[u8]> },
+    Save,
 }
 
 /// The host is done with `workspace`.
@@ -500,7 +503,7 @@ fn abandon(hold: Token, then: &mut Then) -> State {
 fn asked(hold: Token, directory: Token, owner: Token, write: Write, then: &mut Then) -> State {
     then.checkout = Some(match write {
         Write::Push { title, body } => checkout::Event::Push { hold, message: checkout::Message { title, body } },
-        Write::Save { branch } => checkout::Event::Save { hold, branch, message: translate::saved() },
+        Write::Save => checkout::Event::Save { hold, message: translate::saved() },
     });
     State::Ready { hold, directory, asked: Some(owner) }
 }
@@ -620,7 +623,7 @@ mod tests {
         for (repository, tag) in items.repositories.iter_mut().zip(tags) {
             repository.tag = tag;
         }
-        let assignment = stage(&mut domain, fixtures::assignment(true, Box::new([])), items, None).expect("room");
+        let assignment = stage(&mut domain, fixtures::assignment(true, Box::new([])), items).expect("room");
         let workspace = assignment.assignment.workspace.expect("a workspace");
         let commits = [[2; 32], [4; 32]];
         for push in [true, false] {
