@@ -1,0 +1,36 @@
+{
+  "listen": {
+    "socket": "127.0.0.1:0"
+  },
+  "admin_token": "/twin/forge.key",
+  "owner": "playground",
+  "repositories": [
+    {
+      "id": 2,
+      "name": "widget",
+      "landing": "main",
+      "ci": {
+        "path": "changes/2.md",
+        "green": "\n"
+      },
+      "tree": [
+        {
+          "path": "README.md",
+          "content": "# widget\n"
+        },
+        {
+          "path": "src/main.rs",
+          "content": "const TABLE: [(&str, u32); 3] = [(\"apples\", 3), (\"pears\", 5), (\"plums\", 2)];\n\nfn main() {\n    for (name, count) in TABLE {\n        println!(\"{name:<8}{count}\");\n    }\n}\n"
+        },
+        {
+          "path": ".forgejo/workflows/ci.yml",
+          "content": "on:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  check:\n    runs-on: temper-host\n    steps:\n      - run: echo \"temper's starter check passed; replace this step with your own checks\"\n  changes:\n    if: ${{ github.event_name == 'pull_request' }}\n    runs-on: temper-host\n    steps:\n      - name: Each pull request adds changes/<its number>.md\n        run: |\n          echo 'pull_request.number=${{ github.event.pull_request.number }}'\n          auth=$(printf 'x-access-token:%s' \"${{ github.token }}\" | base64 -w0)\n          git -c \"http.extraHeader=Authorization: basic $auth\" clone --quiet --no-checkout \"${{ github.server_url }}/${{ github.repository }}.git\" repo\n          git -C repo checkout --quiet '${{ github.event.pull_request.head.sha }}'\n          test -f 'repo/changes/${{ github.event.pull_request.number }}.md' || { echo 'Missing changes/${{ github.event.pull_request.number }}.md'; exit 1; }\n"
+        },
+        {
+          "path": "CONTRIBUTING.md",
+          "content": "# Contributing\n\nEach pull request adds `changes/<its number>.md`: one line saying what it\nchanges, for the next release's notes. CI checks it.\n"
+        }
+      ]
+    }
+  ]
+}

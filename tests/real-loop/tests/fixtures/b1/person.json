@@ -1,0 +1,5 @@
+{
+  "request": "Add CSV export to widget. Before anything is changed, have the work tell me its plan and wait for my go-ahead.",
+  "answer": "Go ahead. The CSV's first line must be the header fruit,count.",
+  "question": "The inspection found no widget/CSV implementation: `src/main.rs` only has a hard-coded three-row `TABLE` and prints padded name/count text; README is just a title, with no CSV API or dependencies visible. Proposed plan: first identify/confirm the actual widget data source and export entry point; serialize its rows as CSV with a header and proper field escaping; wire this into an export trigger; then test ordinary values plus commas, quotes, and newlines. This checkout lacks enough code to name a more specific integration point. Shall I proceed?"
+}
