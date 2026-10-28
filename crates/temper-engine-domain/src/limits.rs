@@ -261,9 +261,11 @@ pub fn worst_case(limits: &Limits) -> Option<u64> {
         .checked_add(u64::from(route_bound(limits)?))?
         .checked_mul(settings_row)?;
     // Change words belong to tasks, independently of the forge operation bound.
-    let forge_bytes = forge::worst_case(&limits.forge)?.checked_add(
-        u64::from(limits.forge.changes).checked_mul(u64::from(limits.tasks.spec_bytes))?.checked_mul(2)?,
-    )?;
+    let forge_bytes = forge::worst_case(&limits.forge)?
+        .checked_add(Map::<Token, crate::route::panels::LoggedWatch>::worst_case(VIEWS.watchers.checked_add(1)?)?)?
+        .checked_add(
+            u64::from(limits.forge.changes).checked_mul(u64::from(limits.tasks.spec_bytes))?.checked_mul(2)?,
+        )?;
     let landing_bytes = Map::<u32, Box<[LandingRule]>>::worst_case(limits.authority.projects)?.checked_add(
         u64::from(limits.authority.projects).checked_add(1)?.checked_mul(u64::from(limits.journal.transcript_bytes))?,
     )?;

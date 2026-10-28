@@ -71,7 +71,6 @@ pub(crate) fn watched(d: &Domain) -> List<Name> {
     let mut names = List::with_capacity(d.tier_limits.0);
     for (repository, _) in &d.repositories {
         if !d.forge_ended(repository.forge)
-            && !crate::verification::tiers(d, *repository).is_empty()
             && let Some(name) = main_name(d, *repository)
         {
             names.push(name).expect("one main per adopted repository");
@@ -682,6 +681,7 @@ fn finish(
         }
     }
     crate::verification::judged(d, row.repository, &row.tier, result.verdict.number, landings.as_slice(), out);
+    crate::log::judged(d, row.repository, &row.tier, landings.as_slice(), out);
     if !result.received && run.part == policy::Part::Whole {
         let passed = match &result.verdict.failing {
             policy::Failures::Tests(tests) => tests.is_empty(),

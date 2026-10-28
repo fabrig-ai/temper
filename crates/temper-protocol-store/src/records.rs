@@ -8,6 +8,7 @@ mod api;
 mod application;
 mod change;
 mod client;
+mod log;
 mod tiers;
 mod verification;
 #[cfg(test)]
@@ -44,6 +45,7 @@ pub fn encode(value: &d::Stored) -> Box<[u8]> {
             w::Binding::new(&w::CEILINGS, w::BindingParts { address: address.clone(), subject: subject.clone() })
                 .expect(FITS),
         ),
+        d::Stored::LandingLog(row) => w::Value::LandingLog(log::encode(row)),
         d::Stored::Tier(row) => w::Value::Tier(Box::new(tiers::encode(row))),
         d::Stored::Verification(row) => w::Value::Verification(verification::encode(row)),
         d::Stored::Flight { task, entry } => {
@@ -109,6 +111,7 @@ pub fn decode(bytes: &[u8], bounds: &Bounds) -> Result<d::Stored, Undecodable> {
             }
             d::Stored::Binding { address, subject }
         }
+        w::Value::LandingLog(row) => d::Stored::LandingLog(log::decode(row)?),
         w::Value::Tier(row) => d::Stored::Tier(tiers::decode(*row)?),
         w::Value::Verification(row) => d::Stored::Verification(verification::decode(row)?),
         w::Value::Flight(row) => {
@@ -195,6 +198,10 @@ pub(crate) fn limits(forge: &d::Limits) -> Option<w::Limits> {
         tier_record_flakes: forge.failing_tests,
         tier_flake_test: forge.test_id_bytes,
         tier_tests_tests: forge.failing_tests,
+        landing_log_landings: forge.landings_kept,
+        logged_changes: forge.changes,
+        logged_verdicts: forge.tiers,
+        mark_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,
         verification_changes: forge.changes,
         verification_tiers: forge.tiers,
         tier_verification_tier: u32::try_from(d::CHECK_NAME_BYTES).ok()?,

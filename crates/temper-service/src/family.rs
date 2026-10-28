@@ -280,11 +280,23 @@ pub fn to_root(
                             subject: Token::new(subject.task()),
                         }
                     }
-                    w::Watch::Landings(subject) => jig_domain_core::documents::Watched::Application {
-                        scope,
-                        connector: wire::FORGE,
-                        subject: Token::new(forge::landings_subject(subject.project(), subject.ended())),
-                    },
+                    w::Watch::Landings(subject) => {
+                        if let Some(nanos) = subject.newer_than() {
+                            return Ok(root::Event::Party(root::PartyInput::LoggedLandings {
+                                watcher,
+                                sign_in,
+                                scope,
+                                project: subject.project(),
+                                newer_than: skein_lib::Wall::from_nanos(*nanos),
+                                window,
+                            }));
+                        }
+                        jig_domain_core::documents::Watched::Application {
+                            scope,
+                            connector: wire::FORGE,
+                            subject: Token::new(forge::landings_subject(subject.project(), subject.ended())),
+                        }
+                    }
                     w::Watch::Change(_) | w::Watch::Landing(_) => {
                         return Err(Box::new(kit::Event::WatchRefused {
                             watcher,
@@ -1017,9 +1029,58 @@ pub fn document(value: forge::Document, forges: &[crate::settings::Forge], limit
                     )
                     .ok()?;
             }
+            let mut logged = List::with_capacity(u32::try_from(value.logged.len()).ok()?);
+            for entry in value.logged {
+                let mut changes = List::with_capacity(u32::try_from(entry.changes.len()).ok()?);
+                for change in entry.changes {
+                    changes.push(change).ok()?;
+                }
+                let mut verdicts = List::with_capacity(u32::try_from(entry.verdicts.len()).ok()?);
+                for mark in entry.verdicts {
+                    let verdict = match mark.verdict {
+                        forge::Verdict::Verifying => w::LoggedVerdict::Verifying,
+                        forge::Verdict::Cleared => w::LoggedVerdict::Cleared,
+                        forge::Verdict::Red { tests } => {
+                            w::LoggedVerdict::Red(w::LoggedRed::new(limits, w::LoggedRedParts { tests }).ok()?)
+                        }
+                    };
+                    verdicts
+                        .push(w::LoggedMark::new(limits, w::LoggedMarkParts { tier: mark.tier, verdict }).ok()?)
+                        .ok()?;
+                }
+                logged
+                    .push(
+                        w::LoggedLine::new(
+                            limits,
+                            w::LoggedLineParts {
+                                commit: entry.commit,
+                                repository: entry.repository,
+                                seen: entry.seen.as_nanos(),
+                                changes,
+                                verdicts,
+                            },
+                        )
+                        .ok()?,
+                    )
+                    .ok()?;
+            }
+            let newer_than = match value.newer_than {
+                Some(wall) => Some(wall.as_nanos()),
+                None => None,
+            };
+            // Jig family windows accept its document Number cursor: tag 0 and
+            // the little-endian offset (jig's protocol/client.md, 6).
+            let after = match value.after {
+                Some(number) => {
+                    let mut bytes = [0; 9];
+                    bytes.get_mut(1..)?.copy_from_slice(&number.to_le_bytes());
+                    Some(Box::from(bytes.as_slice()))
+                }
+                None => None,
+            };
             let panel = w::LandingsPanel::new(
                 limits,
-                w::LandingsPanelParts { project: value.project, turn: value.turn, landings },
+                w::LandingsPanelParts { newer_than, logged, after, project: value.project, turn: value.turn, landings },
             )
             .ok()?;
             Some(wire::landings_panel(&panel))

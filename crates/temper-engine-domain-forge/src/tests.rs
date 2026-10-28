@@ -7,6 +7,8 @@ mod connect;
 mod demo;
 mod fixtures;
 mod flight;
+#[path = "tests/log.rs"]
+mod landing_log;
 #[path = "tests/landing.rs"]
 mod landing_routes;
 mod panel;
@@ -79,6 +81,7 @@ const LIMITS: Limits = Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    landings_kept: 16,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -108,8 +111,11 @@ fn env() -> Env<Limits> {
     Env { now: Time::from_nanos(100_000_000_000), wall: Wall::from_nanos(100_000_000_000), limits: LIMITS }
 }
 fn domain() -> Domain {
+    domain_with_limits(&LIMITS)
+}
+fn domain_with_limits(limits: &Limits) -> Domain {
     Domain::new(
-        &LIMITS,
+        limits,
         4,
         skein_forge_client::Config {
             namespace: Box::from(&b"test"[..]),

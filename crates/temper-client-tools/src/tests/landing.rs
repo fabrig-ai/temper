@@ -210,7 +210,18 @@ fn list(turn: Option<u64>, tasks: &[u64]) -> w::LandingsPanel {
             )
             .unwrap();
     }
-    w::LandingsPanel::new(&w::CEILINGS, w::LandingsPanelParts { project: 1, turn, landings }).unwrap()
+    w::LandingsPanel::new(
+        &w::CEILINGS,
+        w::LandingsPanelParts {
+            newer_than: None,
+            logged: List::with_capacity(0),
+            after: None,
+            project: 1,
+            turn,
+            landings,
+        },
+    )
+    .unwrap()
 }
 fn read_list(panel: &w::LandingsPanel, json: bool) -> jig::Printed {
     let mut root = f::signed_in(f::PARTY);
@@ -241,7 +252,7 @@ fn landings_print_the_turns_holder_first_then_newest() {
 fn landings_with_none_print_no_landings() {
     assert_eq!(
         read_list(&list(None, &[]), false).stdout.as_ref(),
-        "landings of project 1 · turn: free\nno landings\n".as_bytes()
+        "landings of project 1 · turn: free\nno landings\nno more\n".as_bytes()
     );
     for json in [false, true] {
         let mut root = f::signed_in(f::PARTY);
@@ -363,7 +374,7 @@ fn a_line_can_name_several_changes_repositories_and_landed_commits() {
     parts.landings = List::with_capacity(1);
     parts.landings.push(w::LandingLine::new(&w::CEILINGS, line).unwrap()).unwrap();
     let answer = read_list(&w::LandingsPanel::new(&w::CEILINGS, parts).unwrap(), false);
-    assert_eq!(answer.stdout.as_ref(), "landings of project 1 · turn: free\nlanding 61 · in its turn · change 51, 52 · work/hello, work/lib · main at 111111111111 · main at 222222222222\n".as_bytes());
+    assert_eq!(answer.stdout.as_ref(), "landings of project 1 · turn: free\nlanding 61 · in its turn · change 51, 52 · work/hello, work/lib · main at 111111111111 · main at 222222222222\nno more\n".as_bytes());
 }
 
 #[test]
@@ -462,4 +473,114 @@ fn a_refused_landing_or_landings_watch_prints_not_allowed() {
             assert_eq!(root.watches.len(), 1, "only me remains watched");
         }
     }
+}
+
+const CUTOFF: &str = "2026-10-27T21:00Z";
+fn logged_page(count: u32, after: Option<Box<[u8]>>) -> w::LandingsPanel {
+    let mut logged = List::with_capacity(count);
+    for number in (1..=count).rev() {
+        let mut changes = List::with_capacity(1);
+        let mut verdicts = List::with_capacity(2);
+        if number % 2 != 0 {
+            changes.push(12).unwrap();
+            for (tier, verdict) in [
+                (b"fuzzy".as_slice(), w::LoggedVerdict::Cleared),
+                (
+                    b"browser".as_slice(),
+                    w::LoggedVerdict::Red(
+                        w::LoggedRed::new(&w::CEILINGS, w::LoggedRedParts { tests: Some(2) }).unwrap(),
+                    ),
+                ),
+            ] {
+                verdicts
+                    .push(w::LoggedMark::new(&w::CEILINGS, w::LoggedMarkParts { tier: tier.into(), verdict }).unwrap())
+                    .unwrap();
+            }
+        }
+        logged
+            .push(
+                w::LoggedLine::new(
+                    &w::CEILINGS,
+                    w::LoggedLineParts {
+                        commit: [u8::try_from(number).unwrap(); 32],
+                        repository: b"o/app".as_slice().into(),
+                        seen: jig::argv::deadline(CUTOFF.as_bytes()).unwrap().as_nanos()
+                            + u64::from(number) * 60_000_000_000,
+                        changes,
+                        verdicts,
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+    }
+    w::LandingsPanel::new(
+        &w::CEILINGS,
+        w::LandingsPanelParts {
+            project: 1,
+            turn: None,
+            landings: List::with_capacity(0),
+            newer_than: Some(jig::argv::deadline(CUTOFF.as_bytes()).unwrap().as_nanos()),
+            logged,
+            after,
+        },
+    )
+    .unwrap()
+}
+fn read_logged(panel: &w::LandingsPanel, json: bool, after: Option<&str>) -> jig::Printed {
+    let mut root = f::signed_in(f::PARTY);
+    let mut argv = vec!["landing", "list", "--project", "1", "--newer-than", CUTOFF];
+    if json {
+        argv.push("--json");
+    }
+    if let Some(after) = after {
+        argv.extend(["--after", after]);
+    }
+    let call = root.submit(&argv);
+    let subject =
+        root.watches.values().find(|subject| matches!(subject, client::Watchable::Family { .. })).unwrap().clone();
+    deliver(&mut root, subject, wire::landings_panel(panel));
+    root.answer(call).unwrap()
+}
+#[test]
+fn newer_than_takes_a_utc_minute() {
+    let call = f::call(&["landing", "list", "--project", "1", "--newer-than", CUTOFF]);
+    assert_eq!(f::from_json(&jig::json::write_call(crate::table::TOOLS, &call).unwrap()), call);
+    for time in ["2026-10-27T21:00:01Z", "2026-10-27T21:00+00:00", "2026-10-27"] {
+        assert_eq!(
+            f::parse(&["landing", "list", "--project", "1", "--newer-than", time]),
+            Err(jig::argv::Usage::Kind { argument: 2 })
+        );
+    }
+}
+#[test]
+fn deadline_takes_the_same_kind() {
+    let deadline = jig::rows::AMEND.forms[0].iter().find(|argument| argument.name == b"deadline").unwrap();
+    let newer = landing::LIST.forms[0].iter().find(|argument| argument.name == b"newer-than").unwrap();
+    assert_eq!((deadline.kind, newer.kind), (jig::table::Kind::Time, jig::table::Kind::Time));
+    f::call(&["task", "amend", "41", "--rev", "7", "--deadline", CUTOFF, "because"]);
+}
+#[test]
+fn logged_pages_print_their_changes_times_and_verdicts() {
+    f::check_golden("logged_landings", &read_logged(&logged_page(2, None), false, None).stdout);
+}
+#[test]
+fn logged_pages_json_names_each_tiers_mark() {
+    f::check_golden("logged_landings_json", &read_logged(&logged_page(2, None), true, None).stdout);
+}
+#[test]
+fn a_page_past_32_lines_ends_with_its_cursor_and_the_next_reads_on() {
+    // Jig's Number document cursor: tag 0 and offset 32, little endian.
+    const CURSOR: &str = "002000000000000000";
+    let mut cursor = vec![0];
+    cursor.extend(32_u64.to_le_bytes());
+    let first = read_logged(&logged_page(32, Some(cursor.into_boxed_slice())), false, None);
+    assert!(
+        std::str::from_utf8(&first.stdout)
+            .unwrap()
+            .ends_with(&format!("read on with: landing list --project 1 --newer-than {CUTOFF} --after {CURSOR}\n"))
+    );
+    let second = read_logged(&logged_page(1, None), false, Some(CURSOR));
+    assert!(second.stdout.ends_with(b"no more\n"));
+    assert_eq!(second.status, 0);
 }

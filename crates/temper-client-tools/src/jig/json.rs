@@ -239,6 +239,7 @@ fn decode_value(table: &[&Tool], doc: &Document, at: u32, spec: &Argument, limit
         | Kind::Text
         | Kind::NamedNumber { .. }
         | Kind::Literal
+        | Kind::Time
         | Kind::File
         | Kind::Proposal
         | Kind::Digest
@@ -390,6 +391,7 @@ fn kind_word(kind: Kind) -> &'static [u8] {
         Kind::Text => b"text",
         Kind::Literal => b"literal",
         Kind::File => b"file",
+        Kind::Time => b"time",
         Kind::Duration => b"duration",
         Kind::Proposal => b"proposal",
         Kind::Digest => b"digest",
@@ -497,6 +499,7 @@ fn encode_argument(spec: &Argument, limits: &Limits, out: &mut Encoder) {
         | Kind::Count
         | Kind::Text
         | Kind::Literal
+        | Kind::Time
         | Kind::File
         | Kind::Duration
         | Kind::Proposal

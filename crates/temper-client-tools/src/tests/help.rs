@@ -107,7 +107,7 @@ const USAGES: &[&[u8]] = &[
     b"project show PROJECT\n",
     b"project fund PROJECT AMOUNT [--role ROLE] --key KEY\n",
     b"landing show TASK [--project PROJECT]\n",
-    b"landing list --project PROJECT [--ended]\n",
+    b"landing list --project PROJECT [--ended] [--newer-than TIME] [--after CURSOR]\n",
 ];
 #[test]
 fn a_tools_usage_reads_as_the_design_writes_it() {

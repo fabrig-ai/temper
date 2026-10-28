@@ -60,6 +60,7 @@ pub const LIMITS: top::Limits = top::Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    landings_kept: 16,
 
     failing_tests: 16,
     test_id_bytes: 256,
@@ -148,6 +149,50 @@ impl World {
             true,
         )
     }
+    /// Two repositories for the coordinator's landing history story; only app has a tier.
+    #[must_use]
+    pub fn coordinator() -> World {
+        Self::configured_repositories(
+            11,
+            LIMITS.facts,
+            false,
+            Some(skein_forge_client::Writer { forge: REPO.forge, author: 1 }),
+            None,
+            false,
+            4,
+            false,
+            true,
+            2,
+        )
+    }
+    pub fn adopt_kit(&mut self) {
+        self.event(top::Event::Application {
+            role: None,
+            carried: None,
+            request: Token::new(101),
+            token: Token::new(101),
+            retention: Duration::from_secs(60),
+            ask: top::Ask::Adopt(top::Adoption {
+                project: 5,
+                home: false,
+                forge: REPO.forge,
+                host: b"forge.example".as_slice().into(),
+                owner: b"org".as_slice().into(),
+                name: b"kit".as_slice().into(),
+                prefix: b"temper/".as_slice().into(),
+                role: top::Role::Owned,
+                landing: b"main".as_slice().into(),
+                ci: true,
+                checks: Box::new([]),
+            }),
+        });
+        self.run_for(1);
+    }
+    pub fn push_kit(&mut self) {
+        let env = Env { now: self.env.now, wall: self.env.wall, limits: self.forge_env.limits };
+        forge::advance(&mut self.forge, &env, b"org/kit", b"main", b"file", b"outside temper", 1)
+            .expect("scripted kit push");
+    }
     pub fn project_landing(
         &mut self,
         project: u32,
@@ -173,6 +218,10 @@ impl World {
             self.env.wall,
             &self.env.limits,
         )
+    }
+    #[must_use]
+    pub fn logged(&self, project: u32, since: Wall) -> Option<top::Document> {
+        self.top.logged_page(project, since, (0, None))
     }
     #[must_use]
     pub fn landing(&self, task: u64) -> &top::LandingRow {
@@ -265,6 +314,25 @@ impl World {
         turn: bool,
         tier: bool,
     ) -> World {
+        Self::configured_repositories(seed, facts, hooked, writer, protection, signatures, branches, turn, tier, 1)
+    }
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::fn_params_excessive_bools,
+        reason = "the shared fake fixture with one or two repositories"
+    )]
+    fn configured_repositories(
+        seed: u64,
+        facts: u32,
+        hooked: bool,
+        writer: Option<skein_forge_client::Writer>,
+        protection: Option<raw::Protection>,
+        signatures: bool,
+        branches: u32,
+        turn: bool,
+        tier: bool,
+        repositories: u32,
+    ) -> World {
         let limits = top::Limits {
             landings: if turn { 2 } else { LIMITS.landings },
             facts,
@@ -273,6 +341,7 @@ impl World {
         };
         let mut config = fake_config();
         config.limits.branches = branches;
+        config.limits.repositories = repositories;
         config.limits.workflows = u32::from(turn) + u32::from(tier);
         config.limits.workflow_runs = if turn || tier { 4 } else { 0 };
         config.limits.bypassing_users = protection
@@ -324,6 +393,32 @@ impl World {
                 hooked,
             },
         );
+        if repositories == 2 {
+            forge::repository(
+                &mut fake,
+                &config,
+                raw::Setup {
+                    workflows: Box::new([]),
+                    id: 3,
+                    name: b"org/kit".as_slice().into(),
+                    default: b"main".as_slice().into(),
+                    tree: Box::new([]),
+                    labels: Box::new([]),
+                    checks: raw::Checks {
+                        contexts: Box::new([]),
+                        latency_min: Duration::ZERO,
+                        latency_max: Duration::ZERO,
+                        silent: 0,
+                        passes: 1000,
+                        reruns: 0,
+                        cue: None,
+                    },
+                    protection: None,
+                    hooked: false,
+                },
+            );
+            forge::grant(&mut fake, b"org/kit", 1, raw::Permission::Admin);
+        }
         forge::grant(&mut fake, b"org/repo", 1, raw::Permission::Admin);
         forge::grant(&mut fake, b"org/repo", 2, raw::Permission::Write);
         let top = top::Domain::new(
@@ -882,7 +977,7 @@ impl World {
 
     fn submit(&mut self, call: Token, repository: skein_forge::api::Repository, op: skein_forge::api::Op) {
         assert_eq!(repository.forge, REPO.forge);
-        assert!(repository.repository == REPO.repository || repository.repository == 0);
+        assert!(repository.repository == REPO.repository || repository.repository == 0 || repository.repository == 3);
         self.calls += 1;
         self.call_ops.push(op.clone());
         if let skein_forge::api::Op::Write(_) = op {
@@ -891,7 +986,9 @@ impl World {
         self.serial += 1;
         let token = Token::new(self.serial);
         let raw = translate::op(&op, &self.env.limits.client);
-        let name = translate::locate_name(&op).unwrap_or_else(|| Box::from(&b"org/repo"[..]));
+        let name = translate::locate_name(&op).unwrap_or_else(|| {
+            Box::from(if repository.repository == 3 { b"org/kit".as_slice() } else { b"org/repo".as_slice() })
+        });
         self.pending
             .insert(token, Pending { client: call, op, generation: self.generation })
             .expect("world call slots");
@@ -978,6 +1075,7 @@ fn key(row: &top::Stored) -> top::Key {
         top::Stored::Flight { task, entry } => top::Key::Flight { task: *task, entry: *entry },
         top::Stored::Release(row) => top::Key::Release(row.task),
         top::Stored::Application { token, .. } => top::Key::Application(*token),
+        top::Stored::LandingLog(row) => top::Key::LandingLog(row.repository),
         top::Stored::Writer(row) => top::Key::Writer(row.forge),
     }
 }

@@ -1027,9 +1027,9 @@ fn owned_memory_figures_match_startup_requirements_at_bounded_strings() {
     let scratch = support::Scratch::startup("owned-memory-figures");
     let bounded = support::owned::bounded(scratch.path());
     let required = bounded.requirements();
+    eprintln!("owned requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
     memory_figure("owned", &bounded.memory_terms(), required);
     support::owned::check_memory("../../docs/examples/owned.json", required);
-    eprintln!("owned requirements: engine {}, worker {} bytes", required.engine_bytes, required.worker_bytes);
     check_bounded_startup(&bounded, required);
     scratch.remove();
 }

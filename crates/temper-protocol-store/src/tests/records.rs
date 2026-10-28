@@ -1106,3 +1106,35 @@ fn receipts_preserve_the_check_key_run_and_verdict() {
         }
     }
 }
+
+#[test]
+fn landing_logs_round_trip_changes_times_and_every_verdict() {
+    use temper_engine_domain_forge as d;
+    let row = d::Stored::LandingLog(d::LandingLog {
+        repository: skein_forge::api::Repository { forge: 1, repository: 2 },
+        landings: Box::new([
+            d::Logged {
+                commit: [1; 32],
+                seen: skein_lib::Wall::from_nanos(123),
+                changes: Box::new([51]),
+                verdicts: Box::new([
+                    d::Mark { tier: b"browser".as_slice().into(), verdict: d::Verdict::Verifying },
+                    d::Mark { tier: b"fuzzy".as_slice().into(), verdict: d::Verdict::Cleared },
+                ]),
+            },
+            d::Logged {
+                commit: [2; 32],
+                seen: skein_lib::Wall::from_nanos(456),
+                changes: Box::new([]),
+                verdicts: Box::new([
+                    d::Mark { tier: b"browser".as_slice().into(), verdict: d::Verdict::Red { tests: Some(2) } },
+                    d::Mark { tier: b"fuzzy".as_slice().into(), verdict: d::Verdict::Red { tests: None } },
+                ]),
+            },
+        ]),
+    });
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
+    let key = crate::keys::encode(&d::stored_key(&row), u32::MAX).unwrap();
+    assert_eq!(key.as_ref(), &[27, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2]);
+    assert_eq!(crate::records::row(&key, &crate::records::encode(&row), &bounds), Ok(row));
+}

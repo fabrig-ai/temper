@@ -199,6 +199,7 @@ impl Reconciliation {
             Stored::Landed { .. }
             | Stored::Binding { .. }
             | Stored::DemoAct(_)
+            | Stored::LandingLog(_)
             | Stored::Verification(_)
             | Stored::Tier(_) => {}
             Stored::Flight { task, entry } => self.need(RecordKind::Flight, Need::Entry { task: *task, entry: *entry }),

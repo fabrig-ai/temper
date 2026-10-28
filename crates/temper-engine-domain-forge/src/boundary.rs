@@ -877,6 +877,32 @@ pub struct TierVerdict {
     pub blame: temper_engine_domain_forge_tiers::Blame,
 }
 
+/// Family 27: the retained landing history of one adopted repository.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LandingLog {
+    pub repository: skein_forge::api::Repository,
+    /// Oldest first; bounded by `landings_kept`.
+    pub landings: Box<[Logged]>,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Logged {
+    pub commit: skein_forge::api::Commit,
+    pub seen: skein_lib::Wall,
+    pub changes: Box<[u64]>,
+    pub verdicts: Box<[Mark]>,
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Mark {
+    pub tier: Box<[u8]>,
+    pub verdict: Verdict,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Verdict {
+    Verifying,
+    Cleared,
+    Red { tests: Option<u32> },
+}
+
 /// The connector's durable records, wrapped by the root store.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Stored {
@@ -951,6 +977,7 @@ pub enum Stored {
     },
     Tier(TierRow),
     Verification(Verification),
+    LandingLog(LandingLog),
 }
 /// A bounded connector payload awaiting an authority holder's decision.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -1004,6 +1031,7 @@ pub enum Key {
         repository: skein_forge::api::Repository,
         commit: skein_forge::api::Commit,
     },
+    LandingLog(skein_forge::api::Repository),
 }
 /// A completed phase of the connector's restart contract.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

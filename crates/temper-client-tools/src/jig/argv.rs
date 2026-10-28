@@ -631,9 +631,6 @@ fn check_amend(call: &Call, limits: &Limits) -> Result<(), Usage> {
             return Err(Usage::Twice { argument: u8::try_from(second).expect("amend argument") });
         }
     }
-    if let Some(Value::Text(text)) = crate::jig::call::value(call, 4) {
-        deadline(text).ok_or(Usage::Kind { argument: 4 })?;
-    }
     if let Some(priority) = crate::jig::call::number(call, 2) {
         u32::try_from(priority).or(Err(Usage::Kind { argument: 2 }))?;
     }

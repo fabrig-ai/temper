@@ -146,6 +146,7 @@ pub struct Domain {
     named_calls: Map<crate::NamedCall, crate::CallPayload>,
     proposed_effects: Map<u64, crate::ProposedEffect>,
     pub(crate) landed: Map<skein_forge::api::Commit, u64>,
+    pub(crate) landing_logs: Map<skein_forge::api::Repository, crate::LandingLog>,
     pub(crate) verifications: Map<(skein_forge::api::Repository, skein_forge::api::Commit), crate::Verification>,
     pub(crate) tiers: Map<u32, Box<[crate::RepositoryTiers]>>,
     pub(crate) tier_settings: Map<u32, crate::TierSettings>,
@@ -574,6 +575,7 @@ impl Domain {
             landed: Map::with_capacity(l.landings.max(l.changes)),
             landings: Map::with_capacity(l.landings.max(l.client.resources)),
             verifications: Map::with_capacity(l.changes),
+            landing_logs: Map::with_capacity(l.repositories),
             tiers: Map::with_capacity(l.judge_projects),
             tier_limits: (l.repositories, l.tiers),
             tier_settings: Map::with_capacity(l.judge_projects),
@@ -1740,7 +1742,9 @@ fn outcome_facts(
                     }
                     None => task,
                 };
-                crate::verification::landed(d, kept.entry.repository, commit, change, out);
+                let repository = kept.entry.repository;
+                crate::verification::landed(d, repository, commit, change, out);
+                crate::log::landed(d, repository, commit, change, env.wall, out);
             }
             if d.landed.len() < env.limits.landings.max(env.limits.changes) || d.landed.contains_key(&commit) {
                 d.landed.insert(commit, task).expect("preflighted landed capacity");
@@ -4519,6 +4523,11 @@ fn branch_changed(
     if before == commit {
         return;
     }
+    if let Some(adopted) = d.repositories.get(&resource.repository)
+        && adopted.settings.default_branch == branch
+    {
+        crate::log::moved(d, resource.repository, commit, env.wall, out);
+    }
     let topic = Topic::Landings { repository: resource.repository, branch: branch.clone() };
     if d.landings.len() >= env.limits.landings.max(env.limits.client.resources) {
         if crate::tiers::is_main(d, resource.repository, &branch) {
@@ -4876,6 +4885,9 @@ fn restore(d: &mut Domain, env: &Env<Limits>, record: Stored) {
         }
         Stored::Tier(row) => {
             d.tier_rows.insert((row.repository, row.tier.clone()), row).expect("restored tier bound");
+        }
+        Stored::LandingLog(row) => {
+            d.landing_logs.insert(row.repository, row).expect("restored log within repositories");
         }
         Stored::Verification(row) => {
             d.verifications.insert((row.repository, row.commit), row).expect("restored verification within changes");

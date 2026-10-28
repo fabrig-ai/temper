@@ -219,6 +219,12 @@ enum Blame { cleared, owns: BlamedFailures, suspect: BlamedFailures }
 record TierVerdict { run: u64 blame: Blame }
 record TierVerification { tier: bytes 32 verdict: option TierVerdict repaired: option fixed 32 }
 record Verification { repository: Repository commit: fixed 32 changes: list 65536 u64 tiers: list 32 TierVerification }
+# Family 27: retained landing history (domain/after-landing.md, 10).
+record LoggedRed { tests: option u32 }
+enum LoggedVerdict { verifying, cleared, red: LoggedRed }
+record Mark { tier: bytes 32 verdict: LoggedVerdict }
+record Logged { commit: fixed 32 seen: u64 changes: list 65536 u64 verdicts: list 32 Mark }
+record LandingLog { repository: Repository landings: list 4096 Logged }
 # Family 25: one tier and its run in flight (domain/after-landing.md, 10).
 record TierJudged { tip: fixed 32 key: fixed 32 }
 record TierFlake { test: bytes 4096 count: u32 }
@@ -260,5 +266,5 @@ enum ReceiptCheck { gate: ReceiptName, tier: ReceiptName }
 record ReceiptKey { project: u32 repository: Repository check_name: ReceiptCheck key: fixed 32 }
 record Receipt { failures: option Failures passed: bool run: ReceiptRun candidate: fixed 32 ended: u64 }
 record ReceiptRow { key: ReceiptKey receipt: Receipt }
-enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, tier: boxed TierRow, verification: Verification }
+enum Value { call: Call, proposed_effect: ProposedEffect, repository: Adopted, hold: Hold, names: Names, subscription: Subscriber, branch_head: BranchHead, pull_state: PullState, ci: CiState, landed: Landed, entry: EntryRow, client: ClientRow, change: boxed ChangeRow, issue: boxed IssueRow, release: ReleaseRow, application: Application, writer: ForgeWriter, demo: Demo, binding: Binding, demo_act: DemoAct, flight: Flight, landing: LandingRow, receipt: ReceiptRow, tier: boxed TierRow, verification: Verification, landing_log: LandingLog }
 versioned record Row { value: Value }

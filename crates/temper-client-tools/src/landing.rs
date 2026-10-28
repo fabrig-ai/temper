@@ -42,6 +42,8 @@ pub const LIST: Tool = Tool {
     forms: &[&[
         flag(b"project", b"PROJECT", Kind::Project { empty: false }, Required, b"The project"),
         switch(b"ended", b"Also the landings that ended"),
+        flag(b"newer-than", b"TIME", Kind::Time, Optional, b"Landing branch moves seen after this time"),
+        flag(b"after", b"CURSOR", Kind::Cursor, Optional, b"Read on from the preceding page"),
     ]],
     keyed: Keyed::Never,
     area: 6,
@@ -145,29 +147,52 @@ fn open(watch: &mut Watching, limits: &Limits, out: &mut Queue<Out>) {
     out.push(Out::Client {
         event: Event::Watch {
             handle,
-            subject: subject(
+            subject: subject_page(
                 watch.task,
                 watch.project.expect("resolved project"),
                 value(&watch.called.call, 1).is_some() && watch.task.is_none(),
+                if watch.task.is_none() { newer_than(&watch.called.call) } else { None },
+                if watch.task.is_none() { jig::call::cursor(&watch.called.call, 3) } else { None },
                 limits,
             ),
         },
     });
 }
+#[cfg(test)]
 pub(crate) fn subject(task: Option<u64>, project: u32, ended: bool, limits: &Limits) -> Watchable {
+    subject_page(task, project, ended, None, None, limits)
+}
+fn newer_than(call: &jig::call::Call) -> Option<skein_lib::Wall> {
+    match value(call, 2) {
+        Some(Value::Text(bytes)) => jig::argv::deadline(bytes),
+        _ => None,
+    }
+}
+fn subject_page(
+    task: Option<u64>,
+    project: u32,
+    ended: bool,
+    newer_than: Option<skein_lib::Wall>,
+    after: Option<c::Cursor>,
+    limits: &Limits,
+) -> Watchable {
+    let newer_than = match newer_than {
+        Some(wall) => Some(wall.as_nanos()),
+        None => None,
+    };
     let limits = forge::wire_limits(&limits.domain.forge).expect("checked limits");
     let watch = match task {
         Some(task) => {
             w::Watch::Landing(w::LandingSubject::new(&limits, w::LandingSubjectParts { task }).expect("subject"))
         }
         None => w::Watch::Landings(
-            w::LandingsSubject::new(&limits, w::LandingsSubjectParts { project, ended }).expect("subject"),
+            w::LandingsSubject::new(&limits, w::LandingsSubjectParts { project, ended, newer_than }).expect("subject"),
         ),
     };
     let watching = w::Watching::new(&limits, w::WatchingParts { watch }).expect("watch");
     Watchable::Family {
         scope: c::Scope::Project(project),
-        window: c::Window { rows: 0, after: None },
+        window: c::Window { rows: 32, after },
         record: jig_client::Family {
             family: wire::FORGE,
             version: wire::CLIENT_VERSION,
@@ -198,6 +223,9 @@ fn gone(watch: &Watching, limits: &Limits) -> jig::Printed {
             &w::LandingsPanel::new(
                 &w::CEILINGS,
                 w::LandingsPanelParts {
+                    newer_than: None,
+                    logged: skein_lib::List::with_capacity(0),
+                    after: None,
                     project: watch.project.expect("resolved project"),
                     turn: None,
                     landings: skein_lib::List::with_capacity(0),
@@ -206,6 +234,7 @@ fn gone(watch: &Watching, limits: &Limits) -> jig::Printed {
             .expect("empty list"),
             watch.called.json,
             limits,
+            &watch.called.call,
         ),
     }
 }
@@ -271,7 +300,7 @@ pub(crate) fn told(state: &mut Landings, client: &Client, env: &Env<Limits>, tol
                         },
                         None => match wire::decode_landings_panel(&record.bytes, &limits) {
                             Some(panel) if Some(panel.project()) == watch.project => {
-                                print_list(&panel, watch.called.json, &env.limits)
+                                print_list(&panel, watch.called.json, &env.limits, &watch.called.call)
                             }
                             _ => render::failure(b"unexpected landings document", watch.called.json, 1),
                         },
@@ -436,7 +465,12 @@ fn text(panel: &w::LandingPanel, out: &mut Text) {
     out.number(u64::from(panel.stale_proofs()));
     out.put(b"\n");
 }
-fn list_text(panel: &w::LandingsPanel, out: &mut Text) {
+fn list_text(panel: &w::LandingsPanel, call: Option<&jig::call::Call>, out: &mut Text) {
+    if panel.newer_than().is_some() {
+        logged_text(panel, call, out);
+        continuation(panel, call, out);
+        return;
+    }
     out.put(b"landings of project ");
     out.number(u64::from(panel.project()));
     out.put(b" \xc2\xb7 turn: ");
@@ -492,6 +526,87 @@ fn list_text(panel: &w::LandingsPanel, out: &mut Text) {
         for landed in line.landed() {
             out.put(b" \xc2\xb7 main at ");
             out.put(hex(landed).get(..12).expect("commit prefix"));
+        }
+        out.put(b"\n");
+    }
+    continuation(panel, call, out);
+}
+fn continuation(panel: &w::LandingsPanel, call: Option<&jig::call::Call>, out: &mut Text) {
+    let Some(after) = panel.after() else {
+        out.put(b"no more\n");
+        return;
+    };
+    let Some(call) = call else { return };
+    let mut call = call.clone();
+    *call.values.get_mut(3).expect("list continuation argument") =
+        Some(jig::call::Values::One(Value::Cursor(after.clone())));
+    let mut argv = skein_lib::List::with_capacity(64);
+    jig::argv::back(crate::table::TOOLS, &call, &mut argv).expect("parsed continuation call");
+    out.put(b"read on with: ");
+    for (index, word) in argv.iter().enumerate() {
+        if index != 0 {
+            out.put(b" ");
+        }
+        render::lists::argument(word, out);
+    }
+    out.put(b"\n");
+}
+fn minute(nanos: u64, out: &mut Text) {
+    render::document::clock::minute(skein_lib::Wall::from_nanos(nanos), out);
+}
+fn logged_text(panel: &w::LandingsPanel, call: Option<&jig::call::Call>, out: &mut Text) {
+    out.put(b"landings of project ");
+    let project = match call {
+        Some(call) => value(call, 0),
+        None => None,
+    };
+    match project {
+        Some(Value::Project(jig::call::Project::Name(name))) => out.put(name),
+        _ => out.number(u64::from(panel.project())),
+    }
+    out.put(b" since ");
+    minute(panel.newer_than().expect("history cutoff"), out);
+    out.put(b"\n");
+    for entry in panel.logged() {
+        out.put(b"landed ");
+        out.put(hex(entry.commit()).get(..12).expect("commit prefix"));
+        out.put(b" on ");
+        out.put(entry.repository());
+        out.put(b" at ");
+        minute(entry.seen(), out);
+        out.put(b" \xc2\xb7 ");
+        if entry.changes().is_empty() {
+            out.put(b"from outside temper");
+        } else {
+            out.put(b"change ");
+            for (index, change) in entry.changes().iter().enumerate() {
+                if index != 0 {
+                    out.put(b", ");
+                }
+                out.number(*change);
+            }
+        }
+        out.put(b" \xc2\xb7 ");
+        if entry.verdicts().is_empty() {
+            out.put(b"no tier");
+        }
+        for (index, mark) in entry.verdicts().iter().enumerate() {
+            if index != 0 {
+                out.put(b", ");
+            }
+            out.put(mark.tier());
+            out.put(b" ");
+            match mark.verdict() {
+                w::LoggedVerdict::Verifying => out.put(b"verifying"),
+                w::LoggedVerdict::Cleared => out.put(b"cleared"),
+                w::LoggedVerdict::Red(red) => {
+                    out.put(b"red ");
+                    match red.tests() {
+                        Some(tests) => out.number(u64::from(*tests)),
+                        None => out.put(b"many"),
+                    }
+                }
+            }
         }
         out.put(b"\n");
     }
@@ -665,13 +780,62 @@ fn encode_list(panel: &w::LandingsPanel, out: &mut Encoder) {
         out.object_end();
     }
     out.array_end();
+    out.key(b"newer_than");
+    optional_number(panel.newer_than().as_ref(), out);
+    out.key(b"logged");
+    out.array_start();
+    for entry in panel.logged() {
+        out.object_start();
+        out.key(b"commit");
+        out.string(&hex(entry.commit()));
+        out.key(b"repository");
+        out.string(entry.repository());
+        out.key(b"seen");
+        out.unsigned(entry.seen());
+        out.key(b"changes");
+        out.array_start();
+        for change in entry.changes() {
+            out.unsigned(*change);
+        }
+        out.array_end();
+        out.key(b"verdicts");
+        out.object_start();
+        for mark in entry.verdicts() {
+            out.key(mark.tier());
+            match mark.verdict() {
+                w::LoggedVerdict::Verifying => out.string(b"verifying"),
+                w::LoggedVerdict::Cleared => out.string(b"cleared"),
+                w::LoggedVerdict::Red(red) => {
+                    out.object_start();
+                    out.key(b"red");
+                    optional_number_u32(red.tests().as_ref(), out);
+                    out.object_end();
+                }
+            }
+        }
+        out.object_end();
+        out.object_end();
+    }
+    out.array_end();
+    out.key(b"after");
+    match panel.after() {
+        Some(bytes) => out.string(&jig::argv::value::hexadecimal(bytes).expect("bounded cursor")),
+        None => out.null(),
+    }
     out.object_end();
+}
+fn optional_number_u32(value: Option<&u32>, out: &mut Encoder) {
+    match value {
+        Some(value) => out.unsigned(u64::from(*value)),
+        None => out.null(),
+    }
 }
 fn render_panel(
     one: Option<&w::LandingPanel>,
     list: Option<&w::LandingsPanel>,
     json: bool,
     limits: &Limits,
+    call: Option<&jig::call::Call>,
 ) -> jig::Printed {
     let bytes = if json {
         let bounds = skein_json::writer::Limits { depth: 10, length: limits.tools.text };
@@ -693,13 +857,13 @@ fn render_panel(
         let mut measure = Text::measure();
         match (one, list) {
             (Some(panel), None) => text(panel, &mut measure),
-            (None, Some(panel)) => list_text(panel, &mut measure),
+            (None, Some(panel)) => list_text(panel, call, &mut measure),
             _ => unreachable!("one panel"),
         }
         let mut out = Text::writing_exact(measure);
         match (one, list) {
             (Some(panel), None) => text(panel, &mut out),
-            (None, Some(panel)) => list_text(panel, &mut out),
+            (None, Some(panel)) => list_text(panel, call, &mut out),
             _ => unreachable!("one panel"),
         }
         out.finish()
@@ -710,8 +874,13 @@ fn render_panel(
     jig::Printed { file: jig::FileEnd::Keep, status: 0, stdout: bytes, stderr: Box::default() }
 }
 pub(crate) fn print(panel: &w::LandingPanel, json: bool, limits: &Limits) -> jig::Printed {
-    render_panel(Some(panel), None, json, limits)
+    render_panel(Some(panel), None, json, limits, None)
 }
-pub(crate) fn print_list(panel: &w::LandingsPanel, json: bool, limits: &Limits) -> jig::Printed {
-    render_panel(None, Some(panel), json, limits)
+pub(crate) fn print_list(
+    panel: &w::LandingsPanel,
+    json: bool,
+    limits: &Limits,
+    call: &jig::call::Call,
+) -> jig::Printed {
+    render_panel(None, Some(panel), json, limits, Some(call))
 }

@@ -14,6 +14,8 @@ pub const FLIGHT: u8 = 21;
 pub const VERIFICATION: u8 = 26;
 /// One repository tier (domain/after-landing.md, 10).
 pub const TIER: u8 = 25;
+/// A repository landing log (domain/after-landing.md, 10).
+pub const LANDING_LOG: u8 = 27;
 
 fn write_name(writer: &mut KeyWriter, name: &forge::Name) {
     writer.u64(u64::from(name.forge)).u64(u64::from(name.repository));
@@ -86,6 +88,10 @@ pub fn largest(limits: &forge::Limits) -> Option<u32> {
 pub fn encode(key: &forge::Key, limit: u32) -> Option<Box<[u8]>> {
     let mut writer = KeyWriter::new(limit);
     match key {
+        forge::Key::LandingLog(repository) => {
+            writer.tag(LANDING_LOG);
+            write_repository(&mut writer, *repository);
+        }
         forge::Key::Landing(task) => {
             writer.tag(23).u64(*task);
         }
@@ -235,6 +241,7 @@ pub fn decode(bytes: &[u8], limits: &forge::Limits) -> Option<forge::Key> {
             }
             forge::Key::Tier { repository, tier }
         }
+        LANDING_LOG => forge::Key::LandingLog(read_repository(&mut reader)?),
         VERIFICATION => {
             forge::Key::Verification { repository: read_repository(&mut reader)?, commit: read_commit(&mut reader)? }
         }

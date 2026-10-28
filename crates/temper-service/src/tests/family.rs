@@ -1752,6 +1752,9 @@ fn a_landing_view_encodes_to_its_panel() {
 #[test]
 fn a_landings_view_encodes_to_its_list() {
     let value = forge::LandingsView {
+        newer_than: None,
+        logged: Box::new([]),
+        after: None,
         project: 7,
         turn: Some(61),
         landings: Box::new([forge::LandingLine {
@@ -1781,7 +1784,11 @@ fn the_landings_subject_names_no_task() {
                     &w::CEILINGS,
                     w::WatchingParts {
                         watch: w::Watch::Landings(
-                            w::LandingsSubject::new(&w::CEILINGS, w::LandingsSubjectParts { project, ended }).unwrap(),
+                            w::LandingsSubject::new(
+                                &w::CEILINGS,
+                                w::LandingsSubjectParts { project, ended, newer_than: None },
+                            )
+                            .unwrap(),
                         ),
                     },
                 )
@@ -1841,4 +1848,26 @@ fn the_landings_subject_names_no_task() {
     };
     let kit::Event::WatchRefused { watcher, why } = *refused else { panic!("unknown watch") };
     assert_eq!((watcher, why), (WATCHER, jig_domain_core::WatchRefusal::Unknown));
+}
+
+#[test]
+fn landing_history_keeps_the_wires_full_wall_precision() {
+    const SINCE: u64 = 123_456_789;
+    let subject = w::LandingsSubject::new(
+        &w::CEILINGS,
+        w::LandingsSubjectParts { project: 7, ended: false, newer_than: Some(SINCE) },
+    )
+    .unwrap();
+    let watching = w::Watching::new(&w::CEILINGS, w::WatchingParts { watch: w::Watch::Landings(subject) }).unwrap();
+    let event = family::to_root(
+        watch_exchange(wire::FORGE, wire::CLIENT_VERSION, wire::watching(&watching)),
+        &[],
+        None,
+        &w::CEILINGS,
+    )
+    .unwrap();
+    let root::Event::Party(root::PartyInput::LoggedLandings { project, newer_than, .. }) = event else {
+        panic!("history watch")
+    };
+    assert_eq!((project, newer_than.as_nanos()), (7, SINCE));
 }

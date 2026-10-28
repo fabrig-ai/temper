@@ -81,6 +81,8 @@ pub enum Kind {
     Literal,
     File,
     Duration,
+    /// UTC Gregorian time to the minute.
+    Time,
     Proposal,
     Digest,
     Condition,
@@ -118,6 +120,7 @@ pub fn bound(argument: &Argument, limits: &Limits) -> Bound {
         Kind::Number
         | Kind::File
         | Kind::Duration
+        | Kind::Time
         | Kind::Word { .. }
         | Kind::Proposal
         | Kind::Digest

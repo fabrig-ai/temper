@@ -29,6 +29,7 @@ pub mod items;
 mod judge;
 mod landing;
 mod limits;
+mod log;
 mod panel;
 pub mod purpose;
 mod reconcile;
@@ -57,7 +58,8 @@ pub use temper_engine_domain_forge_landing::{CHECK_NAME_BYTES, WORKFLOW_BYTES};
 pub use temper_engine_domain_forge_landing::{Hold as LandingHold, Phase as LandingPhase};
 pub use tiers::branch as tier_branch;
 pub use views::{
-    Document, GateProof, LandingGate, LandingLine, LandingMember, LandingView, LandingsView, landings_subject,
+    Document, GateProof, LANDING_PAGE, LandingGate, LandingLine, LandingMember, LandingView, LandingsView, LoggedLine,
+    landings_subject,
 };
 /// Connector-owned access to one exact effect on an adopted resource.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -250,6 +252,7 @@ pub fn stored_key(row: &Stored) -> Key {
         Stored::Flight { task, entry } => Key::Flight { task: *task, entry: *entry },
         Stored::Tier(row) => Key::Tier { repository: row.repository, tier: row.tier.clone() },
         Stored::Verification(row) => Key::Verification { repository: row.repository, commit: row.commit },
+        Stored::LandingLog(row) => Key::LandingLog(row.repository),
     }
 }
 /// Checked payload bytes of one connector record for its parent's store page.
@@ -485,6 +488,7 @@ pub fn stored_bytes(record: &Stored) -> Option<u64> {
             Some(held)
         }
         Stored::Verification(row) => verification::stored_bytes(row),
+        Stored::LandingLog(row) => log::stored_bytes(row),
         Stored::Tier(row) => tiers::stored_bytes(row),
         Stored::Release(row) => {
             let comment = match &row.comment {

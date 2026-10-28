@@ -194,6 +194,7 @@ const FORGE: forge::Limits = forge::Limits {
     judge_criteria: 8,
     // Tiers per repository (domain/after-landing.md, 2).
     tiers: 2,
+    landings_kept: 16,
 
     // Failing tests named by one tier run (domain/after-landing.md, 4).
     failing_tests: 16,

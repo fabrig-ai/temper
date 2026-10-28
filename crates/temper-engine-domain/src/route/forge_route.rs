@@ -3013,6 +3013,23 @@ pub(crate) fn outputs(
             }
             forge::Request::Settled { unfinished } => crate::settling::finished(domain, unfinished),
             forge::Request::Save { record, release, read_afresh } => {
+                if let forge::Stored::LandingLog(log) = &record
+                    && let Some(adopted) = domain.forge.repository(log.repository)
+                {
+                    let mut subjects =
+                        List::with_capacity(crate::limits::VIEWS.watchers.checked_add(1).expect("one admitting query"));
+                    for (_, query) in &domain.landing_watches {
+                        if query.project == adopted.project {
+                            subjects.push(query.subject).expect("watch bound");
+                        }
+                    }
+                    if !subjects.is_empty() {
+                        domain.work.push(Work::Core(jig_domain_core::Event::Marked {
+                            connector: domain.config.forge_connector,
+                            subjects,
+                        }));
+                    }
+                }
                 // Both opening and finding a pull save the change with its number.
                 if let forge::Stored::Change(row) = &record {
                     watch_change_pull(domain, env, row);

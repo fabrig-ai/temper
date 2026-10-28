@@ -30,6 +30,7 @@ pub const LIMITS: forge::Limits = forge::Limits {
     judge_projects: 2,
     judge_criteria: 8,
     tiers: 2,
+    landings_kept: 16,
 
     failing_tests: 16,
     test_id_bytes: 256,

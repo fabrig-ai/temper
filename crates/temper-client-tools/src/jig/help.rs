@@ -140,6 +140,7 @@ fn argument_type(kind: Kind, out: &mut Writer) -> Result<(), Overflow> {
         Kind::Word { set } => return choices(set, &[], out),
         Kind::Text | Kind::Literal => b"text",
         Kind::File => b"a file",
+        Kind::Time => b"a UTC time to the minute, as 2026-10-27T21:00Z",
         Kind::Duration => b"a duration: seconds, or a number with s, m or h",
         Kind::Proposal => b"a proposal, tN/K or pN/K",
         Kind::Digest => b"a digest, as a read prints it",

@@ -294,7 +294,7 @@ pub fn verifying() -> Domain {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    prime_tier_main(&mut d);
+    prime_main(&mut d);
     d
 }
 
@@ -332,6 +332,9 @@ pub fn judge(d: &mut Domain, tier: &[u8], blame: temper_engine_domain_forge_tier
 
 /// A committed merge entry, through the client's ordinary find and make.
 pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
+    merged_with_landing(tiers, None)
+}
+pub fn merged_with_landing(tiers: bool, landing: Option<LandingRow>) -> (Domain, Box<[Request]>) {
     use skein_forge::api::{Answer, Write};
     let mut d = domain();
     outputs(&mut d, Event::Restore { record: Stored::Repository(adopted()) });
@@ -341,12 +344,21 @@ pub fn merged(tiers: bool) -> (Domain, Box<[Request]>) {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
-    if tiers {
-        prime_tier_main(&mut d);
-    }
+    prime_main(&mut d);
+    let task = match landing {
+        Some(row) => {
+            let task = row.landing.task;
+            let mut change = opening_row();
+            change.pull = Some(1);
+            outputs(&mut d, Event::Restore { record: Stored::Change(change) });
+            outputs(&mut d, Event::Restore { record: Stored::Landing(row) });
+            task
+        }
+        None => CHANGE,
+    };
     let entry = skein_forge_client::Entry {
         number: OPEN,
-        task: CHANGE,
+        task,
         repository: REPO,
         effect: skein_forge_client::Effect {
             write: Write::Merge { number: 1, head: HEAD, how: skein_forge::api::MergeHow::Style },
@@ -466,7 +478,7 @@ pub fn configured_tier(workflow: usize, paths: usize, path_bytes: usize, artifac
 }
 
 /// Finish the standing main watch's initial read before scripting a change's calls.
-fn prime_tier_main(d: &mut Domain) {
+pub fn prime_main(d: &mut Domain) {
     answer_next(d, Ok(skein_forge::api::Answer::Commit(BASE)));
     ready(d);
 }

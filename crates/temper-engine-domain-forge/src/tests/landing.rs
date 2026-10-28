@@ -47,6 +47,7 @@ fn landing_merge_carries_coherent_evidence_and_veto_withdraws_it() {
     outputs(&mut d, Event::Restored { clock: skein_forge_client::RecoveryClock::Monotonic });
     outputs(&mut d, Event::ReadAfresh);
     outputs(&mut d, Event::SettleOutbox);
+    fixtures::prime_main(&mut d);
     d.changes.get_mut(&fixtures::CHANGE).expect("change").change.state =
         change::State::Ready { head: fixtures::HEAD, ready_since: env().wall };
     let mut row = landing_row(61, policy::Phase::Turn { at: env().wall });

@@ -986,7 +986,8 @@ fn landing_watches_round_trip_without_trailing_bytes() {
     for watch in [
         v1::Watch::Landing(v1::LandingSubject::new(&limits, v1::LandingSubjectParts { task: 61 }).expect("task")),
         v1::Watch::Landings(
-            v1::LandingsSubject::new(&limits, v1::LandingsSubjectParts { project: 1, ended: true }).expect("project"),
+            v1::LandingsSubject::new(&limits, v1::LandingsSubjectParts { project: 1, ended: true, newer_than: None })
+                .expect("project"),
         ),
     ] {
         let watching = v1::Watching::new(&limits, v1::WatchingParts { watch }).expect("watch");
