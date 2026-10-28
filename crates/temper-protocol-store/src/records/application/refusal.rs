@@ -188,6 +188,7 @@ pub(super) fn encode_lack(value: &p::Lack, l: &w::Limits) -> Result<w::Lack, w::
         p::Lack::Reference => w::Lack::Reference,
         p::Lack::ResourceAccess => w::Lack::ResourceAccess,
         p::Lack::ResourceUnavailable => w::Lack::ResourceUnavailable,
+        p::Lack::Ceiling(value) => w::Lack::Ceiling(encode_ceiling(value, l)?),
         p::Lack::Shape => w::Lack::Shape,
         p::Lack::Again { required } => w::Lack::Again(w::LackAgain::new(l, w::LackAgainParts { required: *required })?),
         p::Lack::Account => w::Lack::Account,
@@ -229,6 +230,7 @@ pub(super) fn decode_lack(value: w::Lack) -> p::Lack {
         w::Lack::Reference => p::Lack::Reference,
         w::Lack::ResourceAccess => p::Lack::ResourceAccess,
         w::Lack::ResourceUnavailable => p::Lack::ResourceUnavailable,
+        w::Lack::Ceiling(value) => p::Lack::Ceiling(decode_ceiling(value)),
         w::Lack::Shape => p::Lack::Shape,
         w::Lack::Again(value) => p::Lack::Again { required: value.required() },
         w::Lack::Account => p::Lack::Account,
@@ -704,6 +706,59 @@ const fn decode_bound(value: w::Bound) -> p::Bound {
         w::Bound::History => p::Bound::History,
         w::Bound::Window => p::Bound::Window,
         w::Bound::Output => p::Bound::Output,
+    }
+}
+
+fn encode_ceiling(value: &p::Ceiling, limits: &w::Limits) -> Result<w::Ceiling, w::Problem> {
+    w::Ceiling::new(
+        limits,
+        w::CeilingParts {
+            holder: match value.holder {
+                p::CeilingHolder::Rules => w::CeilingHolder::Rules,
+                p::CeilingHolder::Project => w::CeilingHolder::Project,
+                p::CeilingHolder::Role { role } => {
+                    w::CeilingHolder::Role(w::CeilingRole::new(limits, w::CeilingRoleParts { role })?)
+                }
+            },
+            role: value.role,
+            dimension: match value.dimension {
+                p::CeilingDimension::PeriodSpend => w::CeilingDimension::PeriodSpend,
+                p::CeilingDimension::Spend => w::CeilingDimension::Spend,
+                p::CeilingDimension::Tools => w::CeilingDimension::Tools,
+                p::CeilingDimension::Tasks => w::CeilingDimension::Tasks,
+                p::CeilingDimension::Depth => w::CeilingDimension::Depth,
+                p::CeilingDimension::Executors => w::CeilingDimension::Executors,
+                p::CeilingDimension::Grants => w::CeilingDimension::Grants,
+                p::CeilingDimension::Deadline => w::CeilingDimension::Deadline,
+                p::CeilingDimension::Notes => w::CeilingDimension::Notes,
+            },
+            value: value.value,
+            edit: value.edit,
+        },
+    )
+}
+fn decode_ceiling(value: w::Ceiling) -> p::Ceiling {
+    let parts = value.into_parts();
+    p::Ceiling {
+        holder: match parts.holder {
+            w::CeilingHolder::Rules => p::CeilingHolder::Rules,
+            w::CeilingHolder::Project => p::CeilingHolder::Project,
+            w::CeilingHolder::Role(row) => p::CeilingHolder::Role { role: row.role() },
+        },
+        role: parts.role,
+        dimension: match parts.dimension {
+            w::CeilingDimension::PeriodSpend => p::CeilingDimension::PeriodSpend,
+            w::CeilingDimension::Spend => p::CeilingDimension::Spend,
+            w::CeilingDimension::Tools => p::CeilingDimension::Tools,
+            w::CeilingDimension::Tasks => p::CeilingDimension::Tasks,
+            w::CeilingDimension::Depth => p::CeilingDimension::Depth,
+            w::CeilingDimension::Executors => p::CeilingDimension::Executors,
+            w::CeilingDimension::Grants => p::CeilingDimension::Grants,
+            w::CeilingDimension::Deadline => p::CeilingDimension::Deadline,
+            w::CeilingDimension::Notes => p::CeilingDimension::Notes,
+        },
+        value: parts.value,
+        edit: parts.edit,
     }
 }
 

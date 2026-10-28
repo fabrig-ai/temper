@@ -36,10 +36,23 @@ fn rung_b0s_funds_document_applies_through_ctl_and_preserves_the_settings() {
             })),
             Step::Run(Call::new(&["settings", "show", "rules", "--json"])),
             Step::Run(Call::new(&["settings", "show", "policy", "1", "--json"])),
+            Step::Run(Call::new(&["project", "fund", "1", "449697", "--key", "past-rules"])),
+            Step::Run(Call::new(&["project", "fund", "1", "449697", "--key", "past-rules"]).json()),
         ],
     ));
-    assert_eq!(seen.calls.len(), 7, "read, apply, read back");
-    for call in &seen.calls {
+    assert_eq!(seen.calls.len(), 9, "read, apply, read back, refuse and replay");
+    assert_eq!(seen.calls[7].exit, Some(Exit::Code(2)));
+    assert_eq!(
+        seen.calls[7].stderr,
+        b"project fund: past the rules' period spend, 449696; raise the rules first with temper ctl settings apply\n"
+    );
+    assert_eq!(seen.calls[8].exit, Some(Exit::Code(2)));
+    let refused: serde_json::Value = serde_json::from_slice(&seen.calls[8].stderr).expect("refusal JSON");
+    assert_eq!(
+        refused["outcome"]["refused"]["refusal"]["authority"]["lacking"]["ceiling"],
+        json!({"holder":"rules","role":null,"dimension":"period_spend","value":449_696,"edit":449_697})
+    );
+    for call in &seen.calls[..7] {
         assert_eq!(call.exit, Some(Exit::Code(0)), "{}", String::from_utf8_lossy(&call.stderr));
     }
     for (before, after) in [(2, 5), (3, 6)] {

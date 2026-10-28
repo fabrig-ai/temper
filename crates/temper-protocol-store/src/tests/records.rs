@@ -984,3 +984,22 @@ fn a_changes_result_evidence_survives_restart_with_its_cut_counts() {
     let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).unwrap();
     assert_eq!(records::decode(&records::encode(&row), &bounds), Ok(row));
 }
+
+#[test]
+fn a_ceiling_refusal_round_trips_in_an_application_record() {
+    use jig_domain_people as p;
+    let bounds = crate::bounds(&fixtures::LIMITS, fixtures::LIMITS.client.op_bytes).expect("fixture bounds");
+    let row = application(forge::ApplicationOutcome::CoreRefused(p::Refusal::Authority {
+        lacking: p::Lack::Ceiling(p::Ceiling {
+            holder: p::CeilingHolder::Role { role: u32::MAX },
+            role: None,
+            dimension: p::CeilingDimension::PeriodSpend,
+            value: Some(u64::MAX),
+            edit: Some(0),
+        }),
+        proposable: None,
+    }));
+    let key = crate::keys::encode(&forge::stored_key(&row), u32::MAX).expect("key");
+    let bytes = records::encode(&row);
+    assert_eq!(records::row(&key, &bytes, &bounds), Ok(row));
+}

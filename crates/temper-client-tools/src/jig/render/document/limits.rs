@@ -2,6 +2,7 @@
 use skein_json::writer::Encoder;
 pub(super) fn encode_lacking(value: &jig_client::contract::Lacking, out: &mut Encoder, budget: &mut super::Cut) {
     match value {
+        jig_client::contract::Lacking::Ceiling(ceiling) => super::super::ceiling::json(ceiling, out),
         jig_client::contract::Lacking::HoldOwner { hold, owner } => {
             out.object_start();
             out.key(b"hold_owner");

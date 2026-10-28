@@ -355,3 +355,215 @@ fn project_fund_marks_missing_period_and_cut_flags_as_current_reads() {
         b"project 1: spend per period 0\nnow: period: none open\nnow: project: cut\nnow: configured pools: cut\n"
     );
 }
+
+struct CeilingCase {
+    ceiling: c::Ceiling,
+    text: &'static str,
+    json_holder: &'static str,
+    json_role: &'static str,
+    json_dimension: &'static str,
+}
+const CEILING_CASES: [CeilingCase; 11] = [
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::PeriodSpend,
+            value: Some(449_696),
+            edit: Some(449_697),
+        },
+        text: "past the rules' period spend, 449696; raise the rules first with temper ctl settings apply",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "period_spend",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Project,
+            role: Some(0),
+            dimension: c::CeilingDimension::PeriodSpend,
+            value: Some(100),
+            edit: Some(200),
+        },
+        text: "past the project's period spend, 100; fund the project first: temper ctl project fund 1 AMOUNT",
+        json_holder: "\"project\"",
+        json_role: "0",
+        json_dimension: "period_spend",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Role { role: 0 },
+            role: None,
+            dimension: c::CeilingDimension::PeriodSpend,
+            value: Some(100),
+            edit: Some(50),
+        },
+        text: "below role 0's period spend, 100; lower the role first: temper ctl project fund 1 AMOUNT --role 0",
+        json_holder: "{\"role\":{\"role\":0}}",
+        json_role: "null",
+        json_dimension: "period_spend",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Spend,
+            value: Some(100),
+            edit: Some(200),
+        },
+        text: "the project's authority is past the rules' spend, 100; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "spend",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Project,
+            role: Some(0),
+            dimension: c::CeilingDimension::Tools,
+            value: None,
+            edit: None,
+        },
+        text: "role 0's authority is past the project's tools; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"project\"",
+        json_role: "0",
+        json_dimension: "tools",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Tasks,
+            value: Some(2),
+            edit: Some(3),
+        },
+        text: "the project's authority is past the rules' delegation tasks, 2; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "tasks",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Depth,
+            value: Some(1),
+            edit: Some(2),
+        },
+        text: "the project's authority is past the rules' delegation depth, 1; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "depth",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Deadline,
+            value: Some(10),
+            edit: Some(11),
+        },
+        text: "the project's authority is past the rules' deadline, 10; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "deadline",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Executors,
+            value: None,
+            edit: None,
+        },
+        text: "the project's authority is past the rules' executors; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "executors",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Grants,
+            value: None,
+            edit: None,
+        },
+        text: "the project's authority is past the rules' grants; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "grants",
+    },
+    CeilingCase {
+        ceiling: c::Ceiling {
+            holder: c::CeilingHolder::Rules,
+            role: None,
+            dimension: c::CeilingDimension::Notes,
+            value: None,
+            edit: None,
+        },
+        text: "the project's authority is past the rules' notes; raise the rules with temper ctl settings apply, or narrow the project's policy",
+        json_holder: "\"rules\"",
+        json_role: "null",
+        json_dimension: "notes",
+    },
+];
+
+#[test]
+fn project_fund_ceiling_refusals_name_each_limit_and_preserve_the_json_facts() {
+    for CeilingCase {
+        ceiling: c::Ceiling { holder, role, dimension, value, edit },
+        text,
+        json_holder,
+        json_role,
+        json_dimension,
+    } in CEILING_CASES
+    {
+        for json in [false, true] {
+            let mut root = f::signed_in(f::PARTY);
+            let amount = if dimension == c::CeilingDimension::PeriodSpend {
+                format!("{}", edit.expect("the period edit carries its requested amount"))
+            } else {
+                String::from("200")
+            };
+            let mut argv = vec!["project", "fund", "1", amount.as_str(), "--key", "ceiling"];
+            if role.is_some() {
+                argv.extend(["--role", "0"]);
+            }
+            if json {
+                argv.push("--json");
+            }
+            let call = root.submit(&argv);
+            root.answered(
+                call,
+                c::Answer::Refused {
+                    refusal: c::Refusal::Authority {
+                        lacking: c::Lacking::Ceiling(c::Ceiling { holder, role, dimension, value, edit }),
+                        proposable: None,
+                    },
+                    at: None,
+                },
+            );
+            let printed = root.answer(call).unwrap();
+            assert_eq!(printed.status, 2);
+            assert!(printed.stdout.is_empty());
+            assert!(root.reads.is_empty(), "the refusal itself supplies all facts");
+            let expected = if json {
+                let value = match value {
+                    Some(value) => format!("{value}"),
+                    None => String::from("null"),
+                };
+                let edit = match edit {
+                    Some(edit) => format!("{edit}"),
+                    None => String::from("null"),
+                };
+                format!(
+                    "{{\"operation\":\"project fund\",\"outcome\":{{\"refused\":{{\"refusal\":{{\"authority\":{{\"lacking\":{{\"ceiling\":{{\"holder\":{json_holder},\"role\":{json_role},\"dimension\":\"{json_dimension}\",\"value\":{value},\"edit\":{edit}}}}},\"proposable\":null}}}},\"at\":null}}}},\"task\":null,\"to\":null}}"
+                )
+            } else {
+                format!("project fund: {text}\n")
+            };
+            assert_eq!(printed.stderr.as_ref(), expected.as_bytes());
+        }
+    }
+}

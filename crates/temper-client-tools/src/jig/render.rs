@@ -1,6 +1,7 @@
 //! Bounded terminal bytes and integer JSON (tools contract, 6).
 mod activity;
 pub mod acts;
+mod ceiling;
 pub mod document;
 pub(crate) mod holds;
 pub(crate) mod lists;

@@ -3477,9 +3477,16 @@ fn a_policy_change_beyond_the_deployments_rules_is_refused() {
         },
     }));
     driver.settle();
-    // Authority refusals carry what is lacking (jig b7bdd9e8): the deployment's
-    // rules refuse the policy's shape.
-    let refused = people::Refusal::Authority { lacking: people::Lack::Shape, proposable: None };
+    let refused = people::Refusal::Authority {
+        lacking: people::Lack::Ceiling(people::Ceiling {
+            holder: people::CeilingHolder::Rules,
+            role: None,
+            dimension: people::CeilingDimension::PeriodSpend,
+            value: Some(1000),
+            edit: Some(1001),
+        }),
+        proposable: None,
+    };
     assert!(replied(&driver, &people::Outcome::Refused(refused)));
     assert!(before.is_some());
     assert_eq!(driver.store.rows.get(&policy), before.as_ref());

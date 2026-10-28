@@ -715,6 +715,14 @@ fn refused_text(operation: &Operation, refusal: &c::Refusal, me: Option<&c::Me>,
         }
         return;
     }
+    if let (Some(project), c::Refusal::Authority { lacking: c::Lacking::Ceiling(ceiling), .. }) =
+        (operation.project, refusal)
+        && operation.word == b"project fund"
+    {
+        out.put(b"project fund: ");
+        super::ceiling::text(ceiling, project, limits.application, out);
+        return;
+    }
     if let (Some(project), c::Refusal::Authority { lacking: c::Lacking::Budget { needed, left }, .. }) =
         (operation.project, refusal)
         && operation.word == b"project fund"
