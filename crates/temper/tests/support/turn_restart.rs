@@ -253,7 +253,7 @@ pub fn retry(root: &Path, forge: &Throwaway, previous: &Proof) -> Proof {
 }
 
 fn run_to(root: &Path, forge: &Throwaway, previous: Option<&Proof>, retry: bool) -> (Option<Proof>, Option<Reads>) {
-    let peer = fake_llm(landing_scripts(ANSWER, forge));
+    let peer = fake_llm(temper_real_loop_world::llm::cued_scripts(landing_scripts(ANSWER, forge)));
     peer.configure(root);
     let first = previous.is_none();
     let script = if first { person::adopt_and_start_change(forge) } else { person::found() };

@@ -37,6 +37,12 @@ pub fn scripted_open(scripts: Box<[api::Script]>, strings: u32) -> Recipe {
     played(open_scripts(scripts), api::Rules { cued: Box::new([]), asked: Box::new([]) }, strings)
 }
 
+/// Scripts for Finite agents, whose briefs remain in system text.
+#[must_use]
+pub fn cued_scripts(scripts: Box<[api::Script]>) -> api::Scripts {
+    api::Scripts { cued: scripts, asked: Box::new([]), otherwise: Box::new([]) }
+}
+
 /// Partition the first Open chat from its system-cued delegates.
 #[must_use]
 pub fn open_scripts(scripts: Box<[api::Script]>) -> api::Scripts {

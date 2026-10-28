@@ -1084,7 +1084,10 @@ fn landing(case: &str, raised: bool) {
     if raised {
         support::raise_paces(scratch.path());
     }
-    let peer = support::fake_llm(support::landing_scripts(support::ANSWER, &forgejo));
+    let peer = support::fake_llm(temper_real_loop_world::llm::cued_scripts(support::landing_scripts(
+        support::ANSWER,
+        &forgejo,
+    )));
     let clock = skein_shell::Clock::new();
     let began = clock.now().now;
     let first = support::run_until_landed(scratch.path(), support::person::adopt_and_change(&forgejo), peer, &forgejo);
@@ -1389,7 +1392,9 @@ fn a_native_chat_reaches_the_model() {
     let scratch = support::Scratch::new("native-chat");
     let forgejo = support::forgejo::Throwaway::start(&scratch);
     support::configuration(scratch.path(), &forgejo.forge());
-    let peer = support::fake_llm(vec![support::chat_script(support::ANSWER)].into_boxed_slice());
+    let peer = support::fake_llm(temper_real_loop_world::llm::cued_scripts(
+        vec![support::chat_script(support::ANSWER)].into_boxed_slice(),
+    ));
     let seen = support::run(
         scratch.path(),
         support::person::answered_chat(b"Hello", support::ANSWER),

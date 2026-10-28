@@ -47,7 +47,7 @@ pub fn scripts() -> Box<[Script]> {
 #[must_use]
 pub fn llm(config: &std::path::Path) -> super::boxed::CtlLlm {
     let config = config.to_path_buf();
-    let peer = super::fake_llm(scripts());
+    let peer = super::fake_llm(temper_real_loop_world::llm::open_scripts(scripts()));
     let address = peer.address();
     super::boxed::CtlLlm {
         peer,

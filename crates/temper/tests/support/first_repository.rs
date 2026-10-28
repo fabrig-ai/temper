@@ -58,7 +58,7 @@ pub fn forge_read_llm(config: &Path) -> CtlLlm {
 }
 pub(super) fn model(config: &Path, scripts: Box<[Script]>) -> CtlLlm {
     let config = config.to_path_buf();
-    let peer = super::fake_llm(scripts);
+    let peer = super::fake_llm(temper_real_loop_world::llm::open_scripts(scripts));
     let address = peer.address();
     CtlLlm {
         peer,

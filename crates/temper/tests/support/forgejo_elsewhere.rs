@@ -206,7 +206,8 @@ fn life(root: &Path, restarted: bool) {
     let clock = Clock::new();
     let began = clock.now().now;
     let config = root.join("config");
-    let peer = (!restarted).then(|| super::fake_llm(scripts("elsewhere/first", b"# first")));
+    let peer = (!restarted)
+        .then(|| super::fake_llm(temper_real_loop_world::llm::open_scripts(scripts("elsewhere/first", b"# first"))));
     if let Some(peer) = &peer {
         peer.configure(&config);
     }
