@@ -75,3 +75,6 @@ A chat is a conversation between a party and an agent in a project: an untracked
   ends.
 - A chat whose request goes past what the party may start alone is
   proposed instead, and starts only once accepted.
+- A chat's request is at most the deployment's `people.words` bytes,
+  4,096 on `temper init`'s box: a longer one is refused, and a longer
+  description goes in a file of the repository the chat reads.

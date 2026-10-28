@@ -125,7 +125,8 @@ both do. `--until changed` returns at the subject's next change.
   a party give their keys a prefix of their own, such as
   `review-41-`. A key is never reused for new work.
 - **TEXT** is one argument, or `-` to read stdin to its end; a call
-  reads stdin once.
+  reads stdin once. Its bound is the deployment's `people.words`:
+  4,096 bytes on `temper init`'s box; a longer one is refused.
 - **Secrets** (a model's key, a forge's token or private key, an
   account's record) are read from a file: regular, owned by you, with
   no permission for group or others. Never type one or pass it as an
