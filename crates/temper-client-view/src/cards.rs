@@ -153,6 +153,7 @@ fn owner_outcome(b: &mut Builder, words: &Words, value: &c::OwnerOutcome) {
         | O::Renamed { .. }
         | O::ServiceMade { .. }
         | O::Adopted { .. }
+        | O::Placed { .. }
         | O::Stopped { .. }
         | O::Moved { .. }
         | O::Said { .. }

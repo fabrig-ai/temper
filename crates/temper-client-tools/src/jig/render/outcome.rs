@@ -78,6 +78,7 @@ impl Operation {
                         },
                     },
                 ),
+                c::Ask::Hold { .. } => (b"hold", None),
                 c::Ask::Lift { .. } => (b"lift", None),
                 c::Ask::Release { task, .. } => (b"release", Some(*task)),
                 c::Ask::Stop { task, .. } => (b"stop", Some(*task)),
@@ -314,6 +315,12 @@ fn text(operation: &Operation, outcome: &Outcome, me: Option<&c::Me>, limits: &L
         c::Answer::Done(c::Outcome::SettingsChanged(changed)) => {
             out.put(b"revision ");
             out.number(u64::from(changed.revision));
+        }
+        c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Placed { hold, revision })) => {
+            out.put(b"done: hold ");
+            out.number(*hold);
+            out.put(b" placed, rev ");
+            out.number(revision.value);
         }
         c::Answer::Done(c::Outcome::Owner(c::OwnerOutcome::Lifted { hold, released })) => lifted(*hold, *released, out),
         c::Answer::Done(done) => {
@@ -824,6 +831,7 @@ fn proposal_project(ask: &Ask) -> Option<u32> {
             | c::Ask::Take { .. }
             | c::Ask::HandBack { .. }
             | c::Ask::Decide { .. }
+            | c::Ask::Hold { .. }
             | c::Ask::Lift { .. }
             | c::Ask::Release { .. }
             | c::Ask::Amend { .. }

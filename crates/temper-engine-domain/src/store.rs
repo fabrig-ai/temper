@@ -699,7 +699,9 @@ pub fn record_bytes(record: &Record) -> Option<u64> {
                     }
                     jig_domain_people::Ask::Say { words, .. }
                     | jig_domain_people::Ask::AnswerQuestion { words, .. } => u64::try_from(words.len()).ok(),
-                    jig_domain_people::Ask::Move { reason, .. } | jig_domain_people::Ask::Cancel { reason, .. } => {
+                    jig_domain_people::Ask::Move { reason, .. }
+                    | jig_domain_people::Ask::Hold { reason, .. }
+                    | jig_domain_people::Ask::Cancel { reason, .. } => {
                         u64::try_from(reason.len()).ok()
                     }
                     jig_domain_people::Ask::ChangeSettings { .. }
@@ -959,6 +961,7 @@ pub(crate) fn program_answer_bytes(outcome: &jig_domain_people::Outcome) -> Opti
         | Outcome::AccountChanged
         | Outcome::AccountMovingOut { .. }
         | Outcome::AccountMovedIn { .. }
+        | Outcome::Placed { .. }
         | Outcome::Lifted { .. }
         | Outcome::Refused(_) => Some(0),
     }

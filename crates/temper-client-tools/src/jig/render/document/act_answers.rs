@@ -224,6 +224,7 @@ pub(super) fn encode_owner_outcome(
     budget: &mut super::Cut,
 ) {
     match value {
+        jig_client::contract::OwnerOutcome::Placed { hold, revision } => encode_placed(*hold, *revision, out),
         jig_client::contract::OwnerOutcome::Lifted { hold, released } => encode_lifted(*hold, *released, out),
         jig_client::contract::OwnerOutcome::AccountMovedIn { account, renewed } => {
             encode_moved_in(*account, *renewed, out);
@@ -323,6 +324,17 @@ pub(super) fn encode_owner_outcome(
         jig_client::contract::OwnerOutcome::PoolSet { .. } => owner_pool_set(value, out, budget),
         jig_client::contract::OwnerOutcome::EscalationDecided { .. } => owner_escalation_decided(value, out, budget),
     }
+}
+fn encode_placed(hold: u64, revision: jig_client::contract::Revision, out: &mut Encoder) {
+    out.object_start();
+    out.key(b"hold");
+    out.object_start();
+    out.key(b"hold");
+    out.unsigned(hold);
+    out.key(b"revision");
+    out.unsigned(revision.value);
+    out.object_end();
+    out.object_end();
 }
 fn encode_lifted(hold: u64, released: u32, out: &mut Encoder) {
     out.object_start();
