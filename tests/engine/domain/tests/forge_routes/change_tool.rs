@@ -395,7 +395,7 @@ fn change_selects_the_named_repository_among_several() {
     );
 }
 
-fn named_read(
+pub(super) fn named_read(
     world: &mut World,
     chat: &engine::Assignment,
     completion: u32,

@@ -1493,3 +1493,50 @@ fn a_refused_release_names_its_owner_and_the_exact_proposal() {
         assert_eq!(rendered.text(), format!("Refused: task 41 is held by hold 12 (revision 1), placed by {words}. Propose it: {{\"action\": \"release\", \"task\": 41, \"hold\": 12, \"revision\": 1, \"reason\": \"...\"}}").as_bytes());
     }
 }
+
+#[test]
+fn directory_root_spellings_decode_to_the_empty_path() {
+    for path in [".", "./", ""] {
+        let input = format!(r#"{{"head":"abcdef0123456789abcdef0123456789abcdef01","path":"{path}"}}"#);
+        assert_eq!(
+            decided(b"read_file", input.as_bytes()).unwrap().tool,
+            engine::Tool::ReadNamed {
+                repository: None,
+                read: skein_forge::api::Read::File { head: SHA1_HEAD, path: Box::from([]), max_bytes: 0 }
+            }
+        );
+    }
+}
+#[test]
+fn directory_answers_render_entries_and_the_root_header() {
+    use skein_forge::api::{Answer, Entry, EntryKind};
+    for (path, header) in [(b"src".as_slice(), b"src".as_slice()), (b"", b".")] {
+        for (truncated, tail) in [(false, b"".as_slice()), (true, b"\n[directory cut]".as_slice())] {
+            let value = Answer::Directory {
+                head: SHA1_HEAD,
+                path: path.into(),
+                entries: Box::new([
+                    Entry { name: b"main.rs".as_slice().into(), kind: EntryKind::File },
+                    Entry { name: b"lib".as_slice().into(), kind: EntryKind::Directory },
+                    Entry { name: b"vendor".as_slice().into(), kind: EntryKind::Submodule },
+                ]),
+                truncated,
+            };
+            let rendered = answer(&engine::CallAnswer::ForgeRead(Box::new(Ok(value))));
+            let body =
+                b" at abcdef0123456789abcdef0123456789abcdef01 (a directory):\nmain.rs\nlib/\nvendor (submodule)";
+            let length = header
+                .len()
+                .checked_add(body.len())
+                .expect("fixture size")
+                .checked_add(tail.len())
+                .expect("fixture size");
+            let mut expected = skein_lib::Writer::new(length);
+            for piece in [header, body.as_slice(), tail] {
+                expected.put(piece).expect("measured fixture");
+            }
+            assert!(!rendered.error());
+            assert_eq!(rendered.text(), expected.finish().as_ref());
+        }
+    }
+}

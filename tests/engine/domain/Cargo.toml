@@ -42,6 +42,8 @@ smith-domain-session.workspace = true
 smith-domain-tools.workspace = true
 
 [dev-dependencies]
+skein-fake-llm-domain.workspace = true
+temper-fake.workspace = true
 serde_json.workspace = true
 jig-client.workspace = true
 jig-client-world.workspace = true

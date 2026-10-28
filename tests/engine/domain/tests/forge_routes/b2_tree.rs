@@ -426,3 +426,6 @@ fn b2s_tree_fits_the_boxs_limits() {
     let (mut world, chat) = stock_world();
     tree(&mut world, &chat);
 }
+
+#[path = "directory.rs"]
+mod directory;

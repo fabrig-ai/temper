@@ -778,6 +778,9 @@ fn forge_answer(text: &mut Text, answer: &api::Answer) -> Result<(), Problem> {
             }
             text.add(log)?;
         }
+        api::Answer::Directory { head, path, entries, truncated } => {
+            directory_text(text, head, path, entries, *truncated)?;
+        }
         api::Answer::File { head, path, bytes, truncated } => {
             text.add(path)?;
             text.add(b" at ")?;
@@ -970,4 +973,35 @@ fn hold_owner(
     text.add(b", \"revision\": ")?;
     text.number(revision)?;
     text.add(b", \"reason\": \"...\"}")
+}
+
+fn directory_text(
+    text: &mut Text,
+    head: &api::Commit,
+    path: &[u8],
+    entries: &[api::Entry],
+    truncated: bool,
+) -> Result<(), Problem> {
+    text.add(if path.is_empty() { b"." } else { path })?;
+    text.add(b" at ")?;
+    text.commit(head)?;
+    text.add(b" (a directory):\n")?;
+    for (index, entry) in entries.iter().enumerate() {
+        if index != 0 {
+            text.add(b"\n")?;
+        }
+        text.add(&entry.name)?;
+        match entry.kind {
+            api::EntryKind::File => {}
+            api::EntryKind::Directory => text.add(b"/")?,
+            api::EntryKind::Submodule => text.add(b" (submodule)")?,
+        }
+    }
+    if truncated {
+        if !entries.is_empty() {
+            text.add(b"\n")?;
+        }
+        text.add(b"[directory cut]")?;
+    }
+    Ok(())
 }

@@ -108,10 +108,11 @@ const CHECKS_SPEC: Spec = Spec {
     schema: CHECKS_SCHEMA,
     effect: run::HostEffect::Read,
 };
-const FILE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"The repository, as owner/name; leave it out, or empty, when the project has one."},"head":{"type":"string","description":"The commit's id: 40 or 64 lowercase hexadecimal digits."},"path":{"type":"string","description":"The file's path in the repository."},"max_bytes":{"type":"integer","description":"At most this many bytes; the read's limit when absent.","minimum":1,"maximum":4294967295}},"required":["head","path"]}"#;
+const FILE_SCHEMA: &[u8] = br#"{"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string","description":"The repository, as owner/name; leave it out, or empty, when the project has one."},"head":{"type":"string","description":"The commit's id: 40 or 64 lowercase hexadecimal digits."},"path":{"type":"string","description":"A file's or a directory's path; \".\" or empty for the root."},"max_bytes":{"type":"integer","description":"At most this many bytes; the read's limit when absent.","minimum":1,"maximum":4294967295}},"required":["head","path"]}"#;
 const FILE_SPEC: Spec = Spec {
     name: b"read_file",
-    description: b"Read a file at one head, cut at a byte limit.",
+    description:
+        b"Read a file at one head, cut at a byte limit; a directory's path, the root as \".\", lists its entries.",
     schema: FILE_SCHEMA,
     effect: run::HostEffect::Read,
 };
