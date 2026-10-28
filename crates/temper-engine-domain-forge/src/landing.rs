@@ -609,9 +609,9 @@ pub(crate) fn answered(
                         mode: entry.mode,
                         object: entry.object,
                         kind: match entry.kind {
-                            api::EntryKind::Blob => policy::EntryKind::Blob,
-                            api::EntryKind::Tree => policy::EntryKind::Tree,
-                            api::EntryKind::Commit => policy::EntryKind::Commit,
+                            api::TreeEntryKind::Blob => policy::EntryKind::Blob,
+                            api::TreeEntryKind::Tree => policy::EntryKind::Tree,
+                            api::TreeEntryKind::Commit => policy::EntryKind::Commit,
                         },
                     })
                     .is_err()

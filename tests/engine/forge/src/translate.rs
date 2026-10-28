@@ -341,12 +341,12 @@ pub fn answer_as(
                 .map(|entry| {
                     let mut object = [0; 32];
                     object[..20].copy_from_slice(&entry.object);
-                    client::Entry {
+                    client::TreeEntry {
                         name: entry.name,
                         mode: entry.mode,
                         kind: match entry.kind {
-                            forge::EntryKind::Tree => client::EntryKind::Tree,
-                            forge::EntryKind::Blob => client::EntryKind::Blob,
+                            forge::TreeEntryKind::Tree => client::TreeEntryKind::Tree,
+                            forge::TreeEntryKind::Blob => client::TreeEntryKind::Blob,
                         },
                         object,
                     }
