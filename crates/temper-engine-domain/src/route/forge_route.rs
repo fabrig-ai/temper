@@ -1683,7 +1683,8 @@ fn watch_change_pull(domain: &mut Domain, env: &Env<Limits>, row: &forge::Change
 
 /// Register the connector's procedure beside the task's first due step.
 /// Parameter 1 names a project-unique repository tag, 2 the base,
-/// 3 an optional already-pushed branch, 4 the pull body, and 5 priority.
+/// 3 an optional already-pushed branch, 4 the pull body, 5 priority, and
+/// 10 the failed landing tip for a deployment repair.
 #[expect(clippy::too_many_lines, reason = "one procedure registration and fresh-step route")]
 pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tasks::RunContext) -> bool {
     let task = context.task;
@@ -1711,6 +1712,7 @@ pub(crate) fn start_change(domain: &mut Domain, env: &Env<Limits>, context: &tas
             }
             tasks::Parameter::Number { name: 9, value: 1 } => base_repair = true,
             tasks::Parameter::Bytes { name: 6, .. } => {}
+            tasks::Parameter::Bytes { name: 10, value } if value.len() == 40 || value.len() == 64 => {}
             tasks::Parameter::Number { .. } | tasks::Parameter::Bytes { .. } | tasks::Parameter::Resource { .. } => {
                 return false;
             }
@@ -2384,6 +2386,13 @@ fn review_words(
 
 /// The gate's kind uses the same words as the change panel.
 fn repair_opening(row: &forge::ChangeRow, why: forge_change::Repair) -> Option<Box<[u8]>> {
+    if row.base_repair && why == forge_change::Repair::Ci {
+        let mut words = List::with_capacity(u32::try_from(row.base.len()).ok()?.checked_add(14)?);
+        append(&mut words, b"Repair ");
+        append(&mut words, &row.base);
+        append(&mut words, b" CI at ");
+        return Some(words.into_boxed());
+    }
     let number = match why {
         forge_change::Repair::Ci => return Some(Box::from(&b"Repair CI at "[..])),
         forge_change::Repair::Semantic => return Some(Box::from(&b"Repair the base's break at "[..])),
@@ -2422,6 +2431,7 @@ fn repair_words(
     bound: u32,
 ) -> Option<Box<[u8]>> {
     let previous: &[u8] = match why {
+        forge_change::Repair::Ci if row.base_repair => b"Repair the failed CI on the landing branch",
         forge_change::Repair::Ci => b"Repair the failed CI on the change branch",
         forge_change::Repair::Semantic => b"Repair the base update's semantic conflict",
         forge_change::Repair::Gate(_) => b"Repair the requested gate changes",
@@ -2568,7 +2578,12 @@ fn gate_executor(row: &forge::ChangeRow, kind: forge_change::GateKind) -> tasks:
 
 /// Admit one project-funded repair of a broken landing branch. The owner row
 /// records its identity in the same root decision as the new task.
-fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool {
+fn start_queue_repair(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    failure: Option<&forge::BranchFailure>,
+) -> bool {
     let Some(row) = domain.forge.change(task) else { return false };
     if let Some((_, repair)) = domain.forge.queue_repair(row.repository, &row.base)
         && domain.core.tasks.task(repair).is_some()
@@ -2583,19 +2598,28 @@ fn start_queue_repair(domain: &mut Domain, env: &Env<Limits>, task: u64) -> bool
     let Some(seed) = domain.core.repair_seed(project) else { return false };
     let repair = seed.number();
     let provider = row.repository;
+    let Some(failure) = failure else { return false };
+    let mut subject = row.clone();
+    subject.base_repair = true;
+    subject.change.last_head = Some(failure.head);
+    subject.result.head = Some(failure.head);
+    subject.result.failed = failure.failed.clone();
     let base = row.base.clone();
     let [repository_parameter, base_parameter] = change_parameters(domain.config.forge_connector, provider, base);
-    let spec = tasks::Spec {
-        words: Box::from(&b"Repair landing branch CI"[..]),
-        parameters: Box::new([
-            repository_parameter,
-            base_parameter,
-            // queue_before and queue_first put the base repair first themselves; priority need not claim it.
-            tasks::Parameter::Number { name: 5, value: 0 },
-            tasks::Parameter::Number { name: 9, value: 1 },
-        ]),
-        inputs: Box::new([]),
+    let parameters = Box::new([
+        repository_parameter,
+        base_parameter,
+        tasks::Parameter::Number { name: 5, value: 0 },
+        tasks::Parameter::Number { name: 9, value: 1 },
+        // Pin the producer's brief to the failure this change was made to repair.
+        tasks::Parameter::Bytes { name: 10, value: commit_text(&failure.head) },
+    ]);
+    let Some(words) =
+        repair_words(&subject, forge_change::Repair::Ci, parameters.as_slice(), env.limits.tasks.spec_bytes)
+    else {
+        return false;
     };
+    let spec = tasks::Spec { words, parameters, inputs: Box::new([]) };
     let executor = tasks::Executor::Procedure { connector: domain.config.forge_connector, code: CHANGE_CODE };
     let Some(holdings) = task_holdings(domain, env, project, repair, repair, executor, &spec, None) else {
         return false;
@@ -2788,7 +2812,13 @@ fn wait_change_decision(
     ProcedureStep::new(StepEnd::Wait)
 }
 
-fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: forge_change::Decision) {
+fn change_decision(
+    domain: &mut Domain,
+    env: &Env<Limits>,
+    task: u64,
+    choice: forge_change::Decision,
+    failure: Option<&forge::BranchFailure>,
+) {
     let Some((connector, code, step)) = domain.core.tasks.procedure_due(task) else { return };
     if connector != domain.config.forge_connector || code != CHANGE_CODE {
         return;
@@ -2832,7 +2862,7 @@ fn change_decision(domain: &mut Domain, env: &Env<Limits>, task: u64, choice: fo
             ProcedureStep::new(StepEnd::Wait)
         }
         forge_change::Decision::QueueRepair => {
-            if start_queue_repair(domain, env, task) {
+            if start_queue_repair(domain, env, task, failure) {
                 domain.forge.wait_change(&super::environment_forge(env), task, None);
                 ProcedureStep::new(StepEnd::Wait)
             } else {
@@ -3339,7 +3369,7 @@ pub(crate) fn outputs(
                     landing_decision(domain, env, task, choice);
                 }
             }
-            forge::Request::ChangeDecision { task, decision: choice, entry, evidence } => match choice {
+            forge::Request::ChangeDecision { task, decision: choice, entry, evidence, failure } => match choice {
                 forge_change::Decision::Effect(effect) => {
                     if let Some(entry) = entry
                         && let Some(evidence) = evidence
@@ -3380,6 +3410,7 @@ pub(crate) fn outputs(
                                     env,
                                     task,
                                     forge_change::Decision::Hold(forge_change::Hold::Failed),
+                                    None,
                                 );
                             }
                         }
@@ -3393,7 +3424,7 @@ pub(crate) fn outputs(
                 | forge_change::Decision::QueueRepair
                 | forge_change::Decision::Finish { .. }
                 | forge_change::Decision::Cancel
-                | forge_change::Decision::Hold(_) => change_decision(domain, env, task, choice),
+                | forge_change::Decision::Hold(_) => change_decision(domain, env, task, choice, failure.as_ref()),
             },
             forge::Request::ProjectionSettled { goal } => {
                 if domain.core.tasks.task(goal).is_none() {
