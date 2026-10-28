@@ -55,6 +55,7 @@ impl Frame {
                 | jig_client::Event::Carry { .. }
                 | jig_client::Event::Reply { .. }
                 | jig_client::Event::Lost { .. }
+                | jig_client::Event::Full { .. }
                 | jig_client::Event::Streamed { .. }
                 | jig_client::Event::StreamGone
                 | jig_client::Event::Stored

@@ -601,7 +601,7 @@ impl Host for Person {
     fn is_empty(&self) -> bool {
         self.finished
             && (self.client.as_ref().is_some_and(Host::is_empty)
-                || self.capacity.as_ref().is_some_and(|capacity| capacity.is_empty()))
+                || self.capacity.as_ref().is_some_and(crate::ctl::capacity::Caller::is_empty))
     }
     fn worst_case(&self) -> u64 {
         self.client.as_ref().map_or(64 * 1024 * 1024, Host::worst_case)
@@ -654,7 +654,7 @@ fn service(inherited: &Inherited) -> Proc {
     let setup = stories::held_change().then(|| crate::restart_control::checked_setup(&fixtures::document()));
     let mut document: serde_json::Value = serde_json::from_slice(&fixtures::document()).expect("deployment JSON");
     if let Some(case) = stories::capacity() {
-        if case.init {
+        if case.init() {
             // Start from init's document; use only simulated paths, identities and peers.
             let mut init: serde_json::Value =
                 serde_json::from_slice(include_bytes!("../../../crates/temper-init/template/temper.json"))
@@ -675,7 +675,7 @@ fn service(inherited: &Inherited) -> Proc {
             document["engine"]["limits"]["overrides"]["clients_http.calls"] = (case.streams + 4).into();
             document["application"]["limits"]["overrides"]["server.connections"] = (case.streams + 4).into();
         }
-        if case.exchange_full {
+        if case.exchange_full() {
             document["engine"]["limits"]["overrides"]["clients.exchanges"] = 8.into();
         }
     }

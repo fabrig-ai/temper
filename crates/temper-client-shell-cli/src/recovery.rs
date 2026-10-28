@@ -39,6 +39,7 @@ impl Recovery {
             | Event::Authorize { .. }
             | Event::Reply { .. }
             | Event::Lost { .. }
+            | Event::Full { .. }
             | Event::Streamed { .. }
             | Event::StreamGone
             | Event::Up { .. } => {}

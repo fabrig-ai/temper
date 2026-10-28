@@ -8,12 +8,25 @@ use std::{
 const TAG: u64 = 0xfffd_0000_0000_0000;
 pub(crate) const DEADLINE: Duration = Duration::from_millis(250);
 #[derive(Clone, Copy, Debug)]
+pub enum Profile {
+    Small,
+    Init,
+    FullMap,
+}
+#[derive(Clone, Copy, Debug)]
 pub struct Case {
     pub streams: u32,
-    pub init: bool,
-    pub exchange_full: bool,
+    pub profile: Profile,
     pub json: bool,
     pub export: bool,
+}
+impl Case {
+    pub(crate) fn init(self) -> bool {
+        matches!(self.profile, Profile::Init | Profile::FullMap)
+    }
+    pub(crate) fn exchange_full(self) -> bool {
+        matches!(self.profile, Profile::FullMap)
+    }
 }
 #[derive(Default)]
 struct Observed {
@@ -136,7 +149,7 @@ impl Caller {
             }
             Stage::Watches => {
                 let opened = self.children.len() - 1;
-                if self.case.exchange_full && opened == count && self.complete(count) {
+                if self.case.exchange_full() && opened == count && self.complete(count) {
                     let refused = &self.children[count];
                     assert_eq!(refused.exit, Some(Exit::Code(2)), "{}", String::from_utf8_lossy(&refused.error));
                     assert!(refused.output.is_empty());
@@ -151,7 +164,7 @@ impl Caller {
                 let ready = OBSERVED.with(|o| o.borrow().live.range(1..=count).count());
                 if opened == ready {
                     if opened < count {
-                        if self.case.exchange_full && opened + 1 == count {
+                        if self.case.exchange_full() && opened + 1 == count {
                             self.started = Some(now);
                         }
                         self.spawn(&[b"/client/private", b"inbox", b"--until", b"waiting", b"--timeout", b"90"]);

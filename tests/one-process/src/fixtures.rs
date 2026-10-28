@@ -239,7 +239,7 @@ pub(crate) fn agent() -> temper_service::settings::Agent {
     agent.limits.channel.output_bytes = smith_host_protocol::output_bytes(&agent.limits).expect("host frames");
     agent.bounds.turns = agent_profile().policy.max_turns;
     agent.bounds.message_bytes = 1024;
-    if crate::stories::capacity().is_some_and(|case| case.init) {
+    if crate::stories::capacity().is_some_and(crate::ctl::capacity::Case::init) {
         agent.bounds.message_bytes = 4096;
         agent.host_limits.message_bytes = 4098;
     }

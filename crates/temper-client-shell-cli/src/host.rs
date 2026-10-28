@@ -48,11 +48,16 @@ enum Waiting {
     Answer,
     Condition,
 }
+#[derive(Clone, Copy)]
+enum PrintFormat {
+    Text,
+    Json,
+}
 /// The shell's one-shot host.
 pub struct OneShot {
     directory: Directory,
     call: Option<Parsed>,
-    json: bool,
+    format: PrintFormat,
     class: Class,
     waiting: Waiting,
     pub(crate) root: root::Root,
@@ -168,7 +173,11 @@ impl OneShot {
                 files,
                 u32::try_from(limits.root.tools.ask_bytes).expect("call bound"),
             ),
-            json: matches!(call.parsed, Parsed::Call { json: true, .. }),
+            format: if matches!(call.parsed, Parsed::Call { json: true, .. }) {
+                PrintFormat::Json
+            } else {
+                PrintFormat::Text
+            },
             call: Some(call.parsed),
             class,
             waiting: if class == Class::Wait { Waiting::Condition } else { Waiting::Answer },
@@ -221,7 +230,7 @@ impl OneShot {
         let printed = if printed.status != 0
             && let Some(full) = self.root.client().link().stream_full
         {
-            temper_client_tools::jig::render::stream_full(full, self.json)
+            temper_client_tools::jig::render::stream_full(full, matches!(self.format, PrintFormat::Json))
         } else {
             printed
         };
@@ -343,7 +352,7 @@ impl OneShot {
                 return;
             }
             let signed = self.signing.as_mut().is_some_and(|s| {
-                if matches!(&event, jig_client::Event::Reply { exchange, .. } | jig_client::Event::Lost { exchange } if Some(*exchange) == s.exchange) {
+                if matches!(&event, jig_client::Event::Reply { exchange, .. } | jig_client::Event::Lost { exchange } | jig_client::Event::Full { exchange, .. } if Some(*exchange) == s.exchange) {
                     s.exchange = None;
                     true
                 } else { false }
@@ -351,6 +360,13 @@ impl OneShot {
             self.root_event(event);
             if signed && self.root.client().link().credential.is_none() {
                 use jig_client::NotSignedIn;
+                if let Some(full) = self.root.client().link().stream_full {
+                    self.print(temper_client_tools::jig::render::stream_full(
+                        full,
+                        matches!(self.format, PrintFormat::Json),
+                    ));
+                    return;
+                }
                 match self.root.client().link().not_signed_in {
                     Some(reason @ (NotSignedIn::NotReady | NotSignedIn::Busy)) => {
                         let signing = self.signing.as_mut().expect("link sign-in");
@@ -615,7 +631,10 @@ impl OneShot {
         }
         if self.status.is_none() && self.until.is_some_and(|at| now >= at) {
             if let Some(full) = self.root.client().link().stream_full {
-                self.print(temper_client_tools::jig::render::stream_full(full, self.json));
+                self.print(temper_client_tools::jig::render::stream_full(
+                    full,
+                    matches!(self.format, PrintFormat::Json),
+                ));
                 return;
             }
             if self.signing.as_ref().is_some_and(|signing| signing.last == Some(jig_client::NotSignedIn::Busy)) {
