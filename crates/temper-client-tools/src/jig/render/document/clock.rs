@@ -27,7 +27,7 @@ pub(crate) fn deadline(wall: Wall, out: &mut Text) {
     super::utc(wall, out);
     out.put(b" UTC");
 }
-pub(super) fn minute(wall: Wall, out: &mut Text) {
+pub(crate) fn minute(wall: Wall, out: &mut Text) {
     let (year, month, day) = civil(wall);
     out.number(year);
     out.put(b"-");

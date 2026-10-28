@@ -4,6 +4,47 @@ use alloc::boxed::Box;
 use jig_domain_people::ApplicationScope;
 use jig_domain_views as views;
 
+/// One admitted or currently admitting log watch; the latter occupies one extra slot.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LoggedWatch {
+    pub(crate) subject: Token,
+    pub(crate) project: u32,
+    pub(crate) since: skein_lib::Wall,
+}
+pub(crate) fn watch(
+    domain: &mut Domain,
+    watcher: Token,
+    sign_in: u64,
+    scope: ApplicationScope,
+    project: u32,
+    since: skein_lib::Wall,
+    window: core::documents::Window,
+) {
+    let subject = Token::new(domain.next_landing_subject);
+    domain.next_landing_subject = domain.next_landing_subject.checked_add(1).expect("landing subject space");
+    domain
+        .landing_watches
+        .insert(watcher, LoggedWatch { subject, project, since })
+        .expect("admitted watches plus one admission");
+    domain.work.push(super::Work::Core(core::Event::Watch {
+        watcher,
+        sign_in,
+        subject: core::documents::Watched::Application { scope, connector: domain.config.forge_connector, subject },
+        window,
+    }));
+}
+pub(crate) fn drop_subject(domain: &mut Domain, subject: Token) {
+    let mut found = None;
+    for (watcher, query) in &domain.landing_watches {
+        if query.subject == subject {
+            found = Some(*watcher);
+            break;
+        }
+    }
+    if let Some(watcher) = found {
+        domain.landing_watches.remove(&watcher);
+    }
+}
 pub(crate) fn document(
     domain: &mut Domain,
     env: &Env<Limits>,
@@ -12,6 +53,7 @@ pub(crate) fn document(
     watcher: Token,
     scope: ApplicationScope,
     subject: Token,
+    window: core::documents::Window,
 ) {
     let mut forges = if connector == domain.config.forge_connector
         && scope == ApplicationScope::Deployment
@@ -22,7 +64,18 @@ pub(crate) fn document(
         None
     };
     let mut panel = if connector == domain.config.forge_connector {
-        domain.forge.document(subject.raw(), scope, env.wall, &env.limits.forge)
+        let after = match window.after {
+            Some(core::documents::Cursor::Number { number }) => Some(number),
+            Some(core::documents::Cursor::Inbox { .. }) => Some(u64::MAX),
+            None => None,
+        };
+        match domain.landing_watches.get(&watcher) {
+            Some(query) if scope == ApplicationScope::Project(query.project) && subject == query.subject => {
+                domain.forge.logged_page(query.project, query.since, (window.rows, after))
+            }
+            Some(_) => None,
+            None => domain.forge.document_page(subject.raw(), scope, env.wall, &env.limits.forge, (window.rows, after)),
+        }
     } else {
         None
     };

@@ -49,8 +49,8 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             }
             None
         }
-        core::Ask::Document { watcher, scope, subject, .. } => {
-            super::panels::document(domain, env, decision, connector, watcher, scope, subject);
+        core::Ask::Document { watcher, scope, subject, window, .. } => {
+            super::panels::document(domain, env, decision, connector, watcher, scope, subject, window);
             None
         }
         core::Ask::Read { reply, .. } => {
@@ -61,7 +61,10 @@ pub(crate) fn ask(domain: &mut Domain, env: &Env<Limits>, decision: &mut Decisio
             );
             None
         }
-        core::Ask::DropDocument { .. } => None,
+        core::Ask::DropDocument { subject } => {
+            super::panels::drop_subject(domain, subject);
+            None
+        }
         core::Ask::DropApplication { owner } => {
             super::applications::drop(domain, owner);
             None

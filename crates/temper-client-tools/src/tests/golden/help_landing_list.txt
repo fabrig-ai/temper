@@ -1,6 +1,8 @@
-landing list --project PROJECT [--ended]
+landing list --project PROJECT [--ended] [--newer-than TIME] [--after CURSOR]
   --project PROJECT: a project's name or number; required. The project
   --ended: a switch. Also the landings that ended
+  --newer-than TIME: a UTC time to the minute, as 2026-10-27T21:00Z; optional. Landing branch moves seen after this time
+  --after CURSOR: a cursor, as a read prints it; optional. Read on from the preceding page
 List a project's landings, the turn's holder first, then newest first
 Prints: `landings of project PROJECT`, the turn, and a line per landing: its task, phase, changes and repositories
 --json: the record landings.
