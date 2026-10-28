@@ -32,7 +32,7 @@ pub use store::{
     ProposalDecisionRecord, Range, Record, RunProof, TerminalRecord, TurnProof, TurnRecord, Write, record_bytes,
 };
 
-pub use admission::try_step;
+pub use admission::{completes, try_step};
 pub use boundary::Request as Output;
 pub use boundary::*;
 pub use domain::{Domain, Refused, fire, max_out, refused, release, step};

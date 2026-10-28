@@ -1,4 +1,4 @@
-//! One root input per pass, with store answers always accepted (protocol/README.md, 6).
+//! One root input per pass, with completions passing held new work (protocol/README.md, 6).
 mod diagnostics;
 use crate::{End, route, stop, store::route::Up};
 use alloc::boxed::Box;
@@ -29,6 +29,8 @@ pub(crate) struct Engine {
     pub(crate) drain: Option<stop::Drain>,
     pub(crate) blocked: bool,
     pub(crate) pending: Option<Box<root::Event>>,
+    // A refused completion that tried to pass pending new work. It goes first.
+    passing: Option<Box<root::Event>>,
     begin: bool,
     pub(crate) credentials: List<u32>,
     ready: bool,
@@ -61,7 +63,6 @@ impl Engine {
         let Children { accounts, workers, mut clients, demo, forge, setup, notes, limits: own } = children;
         clients.query_bytes = own.routes.query_bytes;
         let max_out = root::max_out(limits);
-        let capacity = max_out.checked_mul(2).expect("root routing room");
         let credentials = values.identities.numbers();
         let mut domain = match root::Domain::new(config, limits) {
             Ok(domain) => domain,
@@ -89,7 +90,7 @@ impl Engine {
             admission: None,
             facts: 0,
             values,
-            events: Queue::with_capacity(capacity.checked_mul(route_out()).expect("account event room")),
+            events: Queue::uncapped(),
             requests: Queue::with_capacity(max_out),
             end: None,
             listening: Queue::with_capacity(3),
@@ -98,6 +99,7 @@ impl Engine {
             drain: None,
             blocked: false,
             pending: None,
+            passing: None,
             begin: true,
             ready: true,
             settled_revision: None,
@@ -112,7 +114,6 @@ impl Engine {
             && self.workers.batch_room(self.max_out)
             && self.clients.room(self.max_out)
             && self.clients.commit_room()
-            && self.events.room() >= self.max_out.checked_mul(route_out()).expect("translated root outputs")
             && match &self.accounts {
                 Some(accounts) => accounts.batch_room(self.max_out),
                 None => true,
@@ -124,12 +125,29 @@ impl Engine {
     pub(crate) fn step(&mut self, event: root::Event) {
         let watcher = watcher(&event);
         if let Err(event) = root::try_step(&mut self.domain, &self.env, event) {
-            self.pending = Some(Box::new(event));
+            if self.pending.is_some() {
+                assert!(
+                    completes_pending(self) == Some(false) && root::completes(&event),
+                    "only completions pass held new work"
+                );
+                assert!(self.passing.is_none(), "nothing passes a held completion");
+                self.passing = Some(Box::new(event));
+            } else {
+                self.pending = Some(Box::new(event));
+            }
             self.blocked = true;
         } else {
             self.admission = watcher;
         }
         self.drain_facts();
+    }
+    fn can_pass(&self) -> bool {
+        self.passing.is_none()
+            && completes_pending(self) == Some(false)
+            && match self.events.iter().next() {
+                Some(event) => root::completes(event),
+                None => false,
+            }
     }
     fn drain_facts(&mut self) {
         for _ in 0..root::FACTS {
@@ -185,8 +203,10 @@ impl Engine {
             || self.room()
                 && (self.begin
                     || self.release_pending()
+                    || self.can_pass()
                     || !self.blocked
-                        && (self.pending.is_some()
+                        && (self.passing.is_some()
+                            || self.pending.is_some()
                             || !self.events.is_empty()
                             || due
                             || self.domain.ready() && !self.first_periods.is_empty()))
@@ -198,6 +218,7 @@ impl Engine {
             self.ready = false;
             self.settled_revision = Some(self.domain.revision());
             self.pending = None;
+            self.passing = None;
             for _ in 0..self.events.len() {
                 let _event = self.events.pop();
             }
@@ -317,6 +338,12 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
                 valid: skein_lib::Duration::from_nanos(u64::MAX),
             });
         }
+    } else if !engine.blocked && engine.passing.is_some() {
+        let event = engine.passing.take().expect("held passing completion");
+        engine.step(*event);
+    } else if engine.can_pass() {
+        let event = engine.events.pop().expect("next completion");
+        engine.step(event);
     } else if !engine.blocked && engine.pending.is_some() {
         let event = engine.pending.take().expect("held input");
         engine.step(*event);
@@ -340,6 +367,12 @@ pub(crate) fn iterate(engine: &mut Engine, now: Time, wall: Wall) {
         engine.forge.down(skein_forge_connection::Request::Offer);
     }
     clients_pass(engine);
+}
+fn completes_pending(engine: &Engine) -> Option<bool> {
+    match engine.pending.as_deref() {
+        Some(event) => Some(root::completes(event)),
+        None => None,
+    }
 }
 fn clients_pass(engine: &mut Engine) {
     engine.clients.advance(&mut engine.events, &engine.workers.forges, engine.demo.as_ref(), &mut engine.accounts);
@@ -574,7 +607,10 @@ fn watcher(event: &root::Event) -> Option<skein_lib::Token> {
 
 pub(crate) fn forge_pass(engine: &mut Engine) {
     for _ in 0..engine.forge.above.len() {
-        if !engine.forge.room(1) || engine.end.is_none() && !engine.room() {
+        if !engine.forge.room(1)
+            || engine.end.is_none()
+                && (!engine.room() || engine.passing.is_some() || completes_pending(engine) == Some(true))
+        {
             break;
         }
         #[expect(clippy::match_same_arms, reason = "separate exhaustive facts name the tasks that give them meaning")]
