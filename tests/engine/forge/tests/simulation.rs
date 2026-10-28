@@ -2348,7 +2348,10 @@ fn tier_world(ignored: &[&[u8]]) -> World {
     tier_world_with_reports(ignored, false)
 }
 fn tier_world_with_reports(ignored: &[&[u8]], reports: bool) -> World {
-    let mut world = if reports { World::tiered_reports() } else { World::tiered() };
+    let world = if reports { World::tiered_reports(Box::new([])) } else { World::tiered() };
+    configured_tier_world(world, ignored)
+}
+fn configured_tier_world(mut world: World, ignored: &[&[u8]]) -> World {
     world.adopt();
     assert!(world.project_tiers(
         5,
@@ -2594,4 +2597,49 @@ fn inherited_failures_clear_the_landing_after_the_red_one() {
         change_step_task(&mut world, SECOND_CHANGE, 3000, change::Status::Passed, Box::new([]), false, false),
         change::Decision::Finish { merge: second }
     );
+}
+
+#[test]
+fn a_flake_clears_the_range() {
+    use temper_engine_domain_forge_tiers::{Blame, Failures, Flake, Part};
+    const FLAKY: &[u8] = b"suite.flaky";
+    let mut world = configured_tier_world(World::tiered_reports(Box::new([FLAKY.into()])), &[]);
+    tier_hold(&mut world, TIER_BASELINE, 1);
+    tier_step(&mut world, TIER_BASELINE, 1000);
+    tier_step(&mut world, TIER_BASELINE, 1001);
+    let landing = land_for_tier(&mut world, FIRST_CHANGE, b"temper/51");
+    next_report_range(&mut world);
+    // KR2's workflow also flakes in the baseline; this range adds one count.
+    assert_eq!(browser_row(&world).record.flakes.as_ref(), &[Flake { test: FLAKY.into(), count: 1 }]);
+    world.take_calls();
+    for at in 0..RED_STEPS {
+        tier_step(&mut world, TIER_RANGE, 2000 + at);
+        if matches!(&browser_row(&world).record.run.as_ref().expect("range in flight").part, Part::Rerun { .. }) {
+            break;
+        }
+    }
+    assert_eq!(
+        browser_row(&world).record.run.as_ref().expect("failed whole run").part,
+        Part::Rerun { failed: Box::new([FLAKY.into()]) }
+    );
+    finish_tier(&mut world, TIER_RANGE, 2500);
+    let calls = world.take_calls();
+    let selections: Vec<_> = calls
+        .iter()
+        .filter_map(|op| match op {
+            skein_forge::api::Op::Write(skein_forge::api::Write::Dispatch { inputs, .. }) => Some(
+                inputs.iter().find(|input| input.name.as_ref() == b"temper_tests").map(|input| input.value.clone()),
+            ),
+            skein_forge::api::Op::Read(_) | skein_forge::api::Op::Write(_) => None,
+        })
+        .collect();
+    assert_eq!(selections, vec![None, Some(Box::from(b"suite.flaky\n".as_slice()))]);
+    assert_eq!(tier_blame(&world, landing), &Blame::Cleared);
+    assert_eq!(browser_row(&world).record.failing, Failures::Tests(Box::new([])));
+    assert_eq!(browser_row(&world).record.flakes.as_ref(), &[Flake { test: FLAKY.into(), count: 2 }]);
+    assert_eq!(
+        change_step_task(&mut world, FIRST_CHANGE, 3000, change::Status::Passed, Box::new([]), false, false),
+        change::Decision::Finish { merge: landing }
+    );
+    assert!(!world.has_branch(b"temper/tier/browser.2"));
 }

@@ -701,6 +701,7 @@ impl World {
                     if turn {
                         workflows.push(raw::Workflow {
                             fails: Box::new([]),
+                            flaky: Box::new([]),
                             report: None,
                             select: None,
                             file: b"gate.yml".as_slice().into(),
@@ -715,6 +716,7 @@ impl World {
                     if tier {
                         workflows.push(raw::Workflow {
                             fails: Box::new([]),
+                            flaky: Box::new([]),
                             report: if tier_reports {
                                 Some(raw::Report {
                                     artifact: b"report".as_slice().into(),

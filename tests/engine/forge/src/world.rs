@@ -132,7 +132,7 @@ impl World {
             4,
             true,
             false,
-            false,
+            None,
         )
     }
     #[must_use]
@@ -147,12 +147,12 @@ impl World {
             4,
             false,
             true,
-            false,
+            None,
         )
     }
     /// Main, three member branches, the whole run, and its one probe coexist.
     #[must_use]
-    pub fn tiered_reports() -> World {
+    pub fn tiered_reports(flaky: Box<[Box<[u8]>]>) -> World {
         Self::configured(
             11,
             LIMITS.facts,
@@ -163,7 +163,7 @@ impl World {
             6,
             false,
             true,
-            true,
+            Some(flaky),
         )
     }
     pub fn project_landing(
@@ -217,7 +217,7 @@ impl World {
             4,
             false,
             false,
-            false,
+            None,
         )
     }
 
@@ -234,7 +234,7 @@ impl World {
             4,
             false,
             false,
-            false,
+            None,
         )
     }
 
@@ -250,7 +250,7 @@ impl World {
             branches,
             false,
             false,
-            false,
+            None,
         )
     }
 
@@ -286,15 +286,16 @@ impl World {
         branches: u32,
         turn: bool,
         tier: bool,
-        reports: bool,
+        reports: Option<Box<[Box<[u8]>]>>,
     ) -> World {
+        let reporting = reports.is_some();
         let limits = top::Limits {
             landings: if turn { 2 } else { LIMITS.landings },
             facts,
             client: skein_forge_client::Limits { facts, ..CLIENT },
             ..LIMITS
         };
-        let protection = if reports {
+        let protection = if reporting {
             Some(raw::Protection {
                 linear: false,
                 code_owners: false,
@@ -310,7 +311,7 @@ impl World {
         };
         let mut config = fake_config();
         config.limits.branches = branches;
-        if reports {
+        if reporting {
             // Initial tip, three producer heads and their three merge commits.
             config.limits.statuses = 7;
         }
@@ -327,6 +328,7 @@ impl World {
                 workflows: if turn {
                     Box::new([raw::Workflow {
                         fails: Box::new([]),
+                        flaky: Box::new([]),
                         report: None,
                         select: None,
                         file: b"gate.yml".as_slice().into(),
@@ -340,7 +342,8 @@ impl World {
                 } else if tier {
                     Box::new([raw::Workflow {
                         fails: Box::new([]),
-                        report: if reports {
+                        flaky: reports.unwrap_or_default(),
+                        report: if reporting {
                             Some(raw::Report {
                                 artifact: b"report".as_slice().into(),
                                 format: raw::ReportFormat::Lines,
@@ -349,14 +352,18 @@ impl World {
                         } else {
                             None
                         },
-                        select: if reports { Some(b"temper_tests".as_slice().into()) } else { None },
+                        select: if reporting { Some(b"temper_tests".as_slice().into()) } else { None },
                         file: b"browser.yml".as_slice().into(),
                         jobs: Box::new([b"browser".as_slice().into()]),
                         latency_min: Duration::from_secs(90),
                         latency_max: Duration::from_secs(90),
                         silent: 0,
                         passes: 1000,
-                        cue: if reports { Some(raw::Cue::Tests { path: b"failures".as_slice().into() }) } else { None },
+                        cue: if reporting {
+                            Some(raw::Cue::Tests { path: b"failures".as_slice().into() })
+                        } else {
+                            None
+                        },
                     }])
                 } else {
                     Box::new([])
@@ -423,7 +430,7 @@ impl World {
     /// Construct and restart without any configured writer.
     #[must_use]
     pub fn writerless(seed: u64) -> World {
-        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false, false, false)
+        Self::configured(seed, LIMITS.facts, false, None, None, false, 4, false, false, None)
     }
     pub fn give_writer(&mut self, writer: skein_forge_client::Writer) -> bool {
         let accepted = top::writer(&mut self.top, &self.env, writer, &mut self.top_out);
@@ -459,7 +466,7 @@ impl World {
             4,
             false,
             false,
-            false,
+            None,
         )
     }
 
