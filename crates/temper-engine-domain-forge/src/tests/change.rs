@@ -238,6 +238,7 @@ fn a_wake_that_unkeeps_an_inflight_chain_is_not_lost() {
             decision: change::Decision::Ready,
             entry: None,
             evidence: None,
+            failure: None,
         }),
         "the newest wake unkeeps the change: {finished:?}"
     );
@@ -254,6 +255,7 @@ fn a_lower_chain_waiting_without_an_entry_releases_the_later_entry() {
             decision: temper_engine_domain_forge_change::Decision::Wait { until: Some(WAIT_UNTIL) },
             entry: None,
             evidence: None,
+            failure: None,
         }),
         "lower wait: {waited:?}"
     );
@@ -302,8 +304,11 @@ fn an_overtaking_open_outcome_restarts_the_fresh_chain() {
             Op::Read(Read::PullFor { head: Box::from(b"temper/51".as_slice()), base: Box::from(b"main".as_slice()) }),
         ]
     );
-    let [Request::Save { .. }, Request::Marked { tasks }, Request::ChangeDecision { task, decision, entry, evidence }] =
-        finished.as_ref()
+    let [
+        Request::Save { .. },
+        Request::Marked { tasks },
+        Request::ChangeDecision { task, decision, entry, evidence, failure: None },
+    ] = finished.as_ref()
     else {
         panic!("one saved decision")
     };
@@ -328,6 +333,7 @@ fn an_unwoken_chain_finishes_with_its_single_decision() {
             decision: change::Decision::Wait { until: Some(WAIT_UNTIL) },
             entry: None,
             evidence: None,
+            failure: None,
         }
     );
     assert_eq!(ready(&mut d).as_ref(), &[]);
@@ -568,6 +574,7 @@ fn a_settling_change_relies_on_its_own_pull_watch_but_keeps_its_deadline() {
                 decision: change::Decision::Wait { until: Some(until) },
                 entry: None,
                 evidence: None,
+                failure: None,
             }),
             "watch {watch:?}, compared {compared}: the pull wake replaces complete gathers, with a deadline: {finished:?}"
         );

@@ -712,3 +712,24 @@ fn a_gate_repairs_words_open_with_its_number_kind_and_head() {
     }
     assert!(super::repair_words(&row, Repair::Gate(8), &[], 512).is_none(), "an unknown gate cannot be named");
 }
+
+#[test]
+fn a_landing_branch_repairs_words_open_with_its_tip_and_failed_contexts() {
+    let mut row = change_row(None);
+    row.base_repair = true;
+    row.change.last_head = Some(SHA1);
+    row.result.head = Some(SHA1);
+    row.result.failed.bytes = b"/ check (push), / changes (push)".as_slice().into();
+    let words = super::repair_words(&row, super::forge_change::Repair::Ci, &[], 512).unwrap();
+    assert_eq!(
+        words.as_ref(),
+        b"Repair main CI at abcdef012345: / check (push), / changes (push)\nRepair the failed CI on the landing branch"
+    );
+    row.result.failed.bytes = Box::from([b'x'; 80]);
+    let words = super::repair_words(&row, super::forge_change::Repair::Ci, &[], 512).unwrap();
+    let opening = b"Repair main CI at abcdef012345: ";
+    assert!(words[..128].starts_with(opening));
+    assert!(opening.len() + 80 < 128);
+    assert_eq!(&words[opening.len()..opening.len() + 80], &[b'x'; 80]);
+    assert!(super::repair_words(&row, super::forge_change::Repair::Ci, &[], 64).is_none());
+}
