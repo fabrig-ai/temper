@@ -545,7 +545,8 @@ fn the_log_fits_the_small_profiles_existing_application_row() {
     let forge = limits::profile(limits::Profile::Small).forge;
     let words = jig_protocol_config::profile(jig_protocol_config::Profile::Small).core.tasks.spec_bytes;
     let application = temper_protocol_store::application(&forge, words).expect("small application sizes");
-    assert_eq!((application.key, application.value), (257, 534_537));
+    // The change row includes the optional 32-byte repair claim and its tag.
+    assert_eq!((application.key, application.value), (257, 534_570));
     let bounds = temper_protocol_store::bounds(&forge, words).expect("small store bounds");
     let log = temper_protocol_store::v10::LandingLog::worst_case_bytes(bounds.limits()).expect("bounded log");
     assert!(log + 3 <= u64::from(application.value), "version and Value tag frame the log");
