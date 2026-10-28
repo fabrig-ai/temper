@@ -1,6 +1,7 @@
 //! A hold's printed way out uses ctl's shipped grammar.
 use jig_client_world::harness::{ClientId, Settings, Until, World};
 use jig_domain_tasks as tasks;
+use skein_fake_person::{Find, Step};
 use skein_world::domain::Verdict;
 use temper_client_tools::jig::{Printed, call::Parsed};
 use temper_client_world::{app::Temper, fixtures, front::Joint};
@@ -108,5 +109,86 @@ fn the_long_specs_amend_hint_and_forge_connect_hint_parse() {
             })
             .collect();
         assert!(matches!(temper_client_tools::table::parse(&argv), Ok(Parsed::Call { .. })), "{command}");
+    }
+}
+
+fn refused_change(open: bool) -> (ClientWorld, u64) {
+    let mut front = Joint::with_change_landing(fixtures::SEED, &fixtures::domain_limits());
+    front.engine.forge =
+        Some(temper_engine_domain_world::forge_stand::ForgeStand::with_checks(fixtures::REPOSITORIES, &[b"build"]));
+    fixtures::adopt_change_repository(&mut front);
+    front.engine.forge.as_mut().expect("fake forge").push_branch(7, b"temper/refused");
+    let task = if open {
+        fixtures::goal_with_pushed_change_without_open_grant(&mut front, b"temper/refused")
+    } else {
+        fixtures::goal_with_pushed_change_without_review_authority(&mut front, b"temper/refused")
+    };
+    (
+        World::new(
+            Settings {
+                seed: fixtures::SEED,
+                words: fixtures::decision_words(),
+                heap_bytes_per_client: 64 * 1024 * 1024,
+                ..Settings::default()
+            },
+            front,
+        ),
+        task,
+    )
+}
+
+fn task_commands(world: &mut ClientWorld, agent: ClientId, task: u64, expected: &[u8]) -> Vec<Vec<String>> {
+    let printed = call(world, agent, &[b"task", b"show", task.to_string().as_bytes()]);
+    assert!(printed.stdout.windows(expected.len()).any(|word| word == expected), "{printed:?}");
+    let text = std::str::from_utf8(&printed.stdout).expect("ctl text");
+    let line = text.lines().find_map(|line| line.strip_prefix("way out: ")).expect("way out");
+    let release = &line[line.find("task release ").expect("release command")..];
+    let (release, cancel) = release.split_once("; or cancel it: ").expect("cancel command");
+    [release, cancel]
+        .into_iter()
+        .map(|command| {
+            let words: Vec<String> = command
+                .split_ascii_whitespace()
+                .map(|word| if word == "REASON" { "because" } else { word }.to_owned())
+                .collect();
+            let argv: Vec<&[u8]> = words.iter().map(String::as_bytes).collect();
+            assert!(matches!(temper_client_tools::table::parse(&argv), Ok(Parsed::Call { .. })), "{command}");
+            words
+        })
+        .collect()
+}
+
+#[test]
+fn refused_batch_and_vetoed_effect_cards_and_ctl_name_the_reason_and_offer_working_commands() {
+    for (open, expected) in
+        [(false, b"executor outside its delegation authority".as_slice()), (true, b"open pull request")]
+    {
+        let (mut world, task) = refused_change(open);
+        let agent = fixtures::agent(&mut world);
+        for _ in 0..100 {
+            let until = world.now().saturating_add(skein_lib::Duration::from_millis(100));
+            assert_eq!(world.run(Until::Time(until)).verdict, Verdict::Passed);
+            if matches!(world.front().engine.task(task).expect("change").phase, tasks::Phase::Held { .. }) {
+                break;
+            }
+        }
+        assert!(
+            matches!(world.front().engine.task(task).expect("change").phase, tasks::Phase::Held { .. }),
+            "open={open}, task {:?}",
+            world.front().engine.task(task)
+        );
+        call(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes(), b"--until", b"held"]);
+        let client = world.client(fixtures::PARTY, fixtures::task_page(task));
+        world.person(client, vec![Step::See { find: Find::text(expected), within: fixtures::WITHIN }]);
+        assert_eq!(world.run(Until::Done).verdict, Verdict::Passed, "hold card names its effect or reason");
+        // The next actions are in ctl; leave the person's waiting card explicitly.
+        world.go(client, fixtures::chats_page());
+        let commands = task_commands(&mut world, agent, task, expected);
+        call(&mut world, agent, &commands[0].iter().map(String::as_bytes).collect::<Vec<_>>());
+        call(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes(), b"--until", b"held"]);
+        let commands = task_commands(&mut world, agent, task, expected);
+        call(&mut world, agent, &commands[1].iter().map(String::as_bytes).collect::<Vec<_>>());
+        call(&mut world, agent, &[b"task", b"show", task.to_string().as_bytes(), b"--until", b"ended"]);
+        assert!(world.front().engine.task(task).is_none());
     }
 }

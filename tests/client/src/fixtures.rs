@@ -868,13 +868,32 @@ pub fn goal_with_pushed_change_with_tasks(front: &mut Joint, branch: &[u8], task
     pushed_change(front, branch, Some(tasks))
 }
 
+pub fn goal_with_pushed_change_without_review_authority(front: &mut Joint, branch: &[u8]) -> u64 {
+    constrained_change(front, branch, None, None, false)
+}
+pub fn goal_with_pushed_change_without_open_grant(front: &mut Joint, branch: &[u8]) -> u64 {
+    constrained_change(front, branch, None, Some(3), true)
+}
 fn pushed_change(front: &mut Joint, branch: &[u8], tasks: Option<u32>) -> u64 {
+    constrained_change(front, branch, tasks, None, true)
+}
+fn constrained_change(
+    front: &mut Joint,
+    branch: &[u8],
+    tasks: Option<u32>,
+    omit_kind: Option<u16>,
+    review: bool,
+) -> u64 {
     let driver = &mut front.engine;
     let jig_domain_people::Ask::Create { mut batch, .. } = driver.chat_ask(GOAL_PROJECT, GOAL_BRIEF) else {
         panic!("create fixture");
     };
     if let Some(tasks) = tasks {
         batch[0].authority.delegation.tasks = tasks;
+    }
+    if let Some(kind) = omit_kind {
+        batch[0].authority.grants =
+            batch[0].authority.grants.iter().filter(|grant| grant.kind != kind).cloned().collect();
     }
     // These grants come from this joint's configured forge connector.
     let connector = batch[0].authority.grants[0].connector;
@@ -883,7 +902,12 @@ fn pushed_change(front: &mut Joint, branch: &[u8], tasks: Option<u32>) -> u64 {
     batch[0].flags.conversation = false;
     batch[0].flags.listed = true;
     batch[0].authority.tools = NO_TOOLS;
-    batch[0].authority.delegation.kinds = Box::new([jig_domain_people::Executor::Charter(4)]);
+    // A normal pushed change can review and then repair under this joint's coding charter.
+    batch[0].authority.delegation.kinds = if review {
+        Box::new([jig_domain_people::Executor::Charter(1), jig_domain_people::Executor::Charter(4)])
+    } else {
+        Box::new([])
+    };
     batch[0].parameters = Box::new([
         jig_domain_people::Parameter::Resource { name: REPOSITORY_PARAMETER, connector, resource: GOAL_REPOSITORY },
         jig_domain_people::Parameter::Bytes { name: 3, value: branch.into() },

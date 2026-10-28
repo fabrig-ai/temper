@@ -179,6 +179,7 @@ pub fn worst_case(l: &Limits) -> Option<u64> {
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLanding>::worst_case(l.landings)?)?
         .checked_add(Map::<skein_lib::Token, crate::domain::PendingLost>::worst_case(l.holds)?)?
         .checked_add(Map::<u64, crate::ChangeRow>::worst_case(l.changes)?)?
+        .checked_add(u64::from(l.changes).checked_mul(u64::from(crate::EFFECT_ACCOUNT_BYTES))?)?
         .checked_add(
             u64::from(l.changes)
                 .checked_mul(u64::from(l.change_policy.gates))?

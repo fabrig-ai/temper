@@ -446,6 +446,7 @@ pub(crate) fn held_task(mut task: c::Task, reason: c::HoldCategory) -> c::Task {
     task.chip.phase = c::Phase::Held;
     task.hold = Some(c::TaskHold::Owner(Box::new(c::OwnerChipHold {
         placed: None,
+        words: None,
         circle: None,
         account: None,
         source: None,

@@ -236,6 +236,12 @@ pub(super) fn encode_owner_chip_hold(
         out.key(b"placed");
         super::placed_hold::encode(placed, out, budget);
     }
+    out.key(b"words");
+    match &value.words {
+        Some(words) => super::encode_document_text(words, out, budget),
+        None => out.null(),
+    }
+
     out.key(b"account");
     match &value.account {
         Some(item_1) => {
