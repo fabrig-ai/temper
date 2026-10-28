@@ -2290,16 +2290,6 @@ fn browser_row(world: &World) -> &top::TierRow {
     row
 }
 fn tier_hold(world: &mut World, task: u64, number: u64) {
-    let branch = format!("browser.{number}").into_bytes().into_boxed_slice();
-    world.event(top::Event::Hold {
-        task,
-        resource: top::Name {
-            forge: REPO.forge,
-            repository: REPO.repository,
-            what: top::What::Branch(Box::new([b"temper".as_slice().into(), b"tier".as_slice().into(), branch])),
-        },
-        from: None,
-    });
     world.event(top::Event::TierTask { repository: REPO, tier: b"browser".as_slice().into(), number, task });
 }
 fn tier_step(world: &mut World, task: u64, entry: u64) -> bool {

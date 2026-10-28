@@ -353,6 +353,9 @@ fn effect_write(out: &[Request]) -> &api::Write {
         if let Request::TierEffect { entry, .. } = request {
             return &entry.effect.write;
         }
+        if let Request::Save { record: Stored::Entry { entry, .. }, release: Some(_), .. } = request {
+            return &entry.effect.write;
+        }
     }
     unreachable!("the step made an effect")
 }
@@ -930,7 +933,7 @@ fn tell_all_makes_every_landing_of_the_range_a_suspect() {
     }
 }
 #[test]
-fn a_probes_branch_is_made_at_its_landing_and_deleted_after() {
+fn a_probes_branch_is_made_at_its_landing_and_released_after() {
     let mut d = red_range(&[MERGE, HEAD, THIRD]);
     red(&mut d);
     let made = probe_step(&mut d, 301);
@@ -947,17 +950,32 @@ fn a_probes_branch_is_made_at_its_landing_and_deleted_after() {
     let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: 303 });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1.0".as_slice().into() });
     let saved = &d.entries.get(&303).unwrap().entry;
-    assert_eq!(d.tier_effect_kind(saved).unwrap().0, 15);
+    assert_eq!(d.tier_effect_kind(saved), None);
+    assert_release(&out, 303);
 }
 #[test]
-fn a_judged_runs_branch_is_deleted_before_its_task_is_done() {
+fn a_judged_runs_branch_is_released_before_its_task_is_done() {
     let mut d = dispatched();
     completed(&mut d, api::Conclusion::Success, None);
     dispatch(&mut d, STATUS);
     let out = outputs(&mut d, Event::StepTier { task: TIER_TASK, entry: RETRY });
     assert_eq!(effect_write(&out), &api::Write::DeleteBranch { branch: b"temper/tier/browser.1".as_slice().into() });
-    assert!(tier_decision(&out).is_none());
+    assert_eq!(tier_decision(&out), Some(&TierDecision::Wait));
     assert!(fixtures::browser(&d).result.as_ref().unwrap().applied);
+    assert_release(&out, RETRY);
+}
+fn assert_release(out: &[Request], number: u64) {
+    let mut found = false;
+    for request in out {
+        if let Request::TierEffect { .. } = request {
+            panic!("cleanup is not an authority-gated effect")
+        }
+        if let Request::Save { record: Stored::Entry { entry, .. }, release: Some(release), .. } = request {
+            assert_eq!((*release, entry.number), (number, number));
+            found = true;
+        }
+    }
+    assert!(found, "cleanup hands its durable entry to the client after commit");
 }
 #[test]
 fn a_restart_mid_probe_follows_it_to_its_verdict() {

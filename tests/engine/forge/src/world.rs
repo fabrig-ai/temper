@@ -867,12 +867,15 @@ impl World {
                         self.stored.insert(key(&record), record).expect("world store capacity");
                     }
                 }
-                top::Request::Save { record, .. } => {
+                top::Request::Save { record, release, .. } => {
                     if matches!(record, top::Stored::Writer(_)) {
                         self.writer_saves += 1;
                     }
                     let key = key(&record);
                     self.stored.insert(key, record).expect("world store capacity");
+                    if let Some(entry) = release {
+                        self.to_top.push((self.generation, top::Event::Committed { entry }));
+                    }
                 }
                 top::Request::Erase { key } => {
                     self.stored.remove(&key).expect("erased row exists");

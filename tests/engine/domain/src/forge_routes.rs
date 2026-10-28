@@ -22,6 +22,7 @@ use temper_engine_forge_world::{self as forge_world, translate};
 pub enum HoldWrite {
     All,
     Merge,
+    DeleteBranch(&'static [u8]),
 }
 
 #[expect(clippy::struct_excessive_bools, reason = "independent fixture switches select the forge stories")]
@@ -334,7 +335,7 @@ impl World {
                 reviewer.policy.agents = false;
                 config.core.defaults.charters = Box::new([walking::charter(), producer, reviewer]);
                 config.forge_charter = forge_charter.unwrap_or(1);
-                limits.tasks.authority_grants = if tier { 15 } else { 11 };
+                limits.tasks.authority_grants = if tier { 14 } else { 11 };
                 limits.journal.run_bytes = 8192;
                 limits.tasks.authority_segments = 9;
                 limits.tasks.authority_bytes = 512;
@@ -343,7 +344,7 @@ impl World {
                 limits.tasks.inbox_bytes = 1024;
                 limits.authority.executors = 5;
                 limits.authority.batch = 2;
-                limits.authority.grants = if tier { 15 } else { 11 };
+                limits.authority.grants = if tier { 14 } else { 11 };
                 limits.authority.segments = 8;
                 limits.authority.segment_bytes = 64;
                 limits.authority.writes = 2;
@@ -426,7 +427,7 @@ impl World {
                     for item in grants {
                         expanded.push(item).expect("task grant bound");
                     }
-                    for kind in [6, 15, 16, 17] {
+                    for kind in [6, 16, 17] {
                         expanded.push(authority::Grant { kind, ..grant.clone() }).expect("tier grant bound");
                     }
                     grants = expanded.into_boxed();
@@ -502,8 +503,8 @@ impl World {
                     paths::add_reader(&mut policy);
                 }
                 if turn {
-                    limits.authority.grants = if tier { 15 } else { 14 };
-                    limits.tasks.authority_grants = if tier { 15 } else { 14 };
+                    limits.authority.grants = 14;
+                    limits.tasks.authority_grants = 14;
                     limits.authority.executors = 6;
                     limits.tasks.executor_kinds = 6;
                     limits.tasks.result_bytes = 256;
@@ -1308,6 +1309,9 @@ impl World {
                     )));
                     let held = match self.hold_write_answers {
                         Some(HoldWrite::All) => matches!(op, skein_forge::api::Op::Write(_)),
+                        Some(HoldWrite::DeleteBranch(name)) => {
+                            matches!(&op, skein_forge::api::Op::Write(skein_forge::api::Write::DeleteBranch { branch }) if branch.as_ref() == name)
+                        }
                         Some(HoldWrite::Merge) => {
                             matches!(op, skein_forge::api::Op::Write(skein_forge::api::Write::Merge { .. }))
                         }

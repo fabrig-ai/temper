@@ -817,7 +817,23 @@ fn wait(task: u64, out: &mut Queue<Request>) {
 }
 fn effect(d: &mut Domain, row: &TierRow, entry: u64, write: Write, operation: u8, part: u16, out: &mut Queue<Request>) {
     let task = row.task.expect("effect task");
-    let entry = skein_forge_client::Entry {
+    let entry = tier_entry(row, entry, write);
+    save(row, out);
+    crate::domain::keep_entry(d, entry.clone(), None, out);
+    out.push(Request::TierEffect { task, entry, purpose: purpose(d, row, operation, part) });
+}
+// Cleanup is committed straight to the forge client, as domain::enqueue_release
+// does (domain/forge.md, 11). The tier row owns its pending branch; no generic
+// release row, hold, task name, or jig effect authority is allocated.
+fn release(d: &mut Domain, row: &TierRow, number: u64, write: Write, out: &mut Queue<Request>) {
+    let entry = tier_entry(row, number, write);
+    save(row, out);
+    crate::domain::keep_entry(d, entry, Some(number), out);
+    wait(row.task.expect("release task"), out);
+}
+fn tier_entry(row: &TierRow, entry: u64, write: Write) -> skein_forge_client::Entry {
+    let task = row.task.expect("tier task");
+    skein_forge_client::Entry {
         number: entry,
         task,
         repository: row.repository,
@@ -826,10 +842,7 @@ fn effect(d: &mut Domain, row: &TierRow, entry: u64, write: Write, operation: u8
         attempt: None,
         failures: 0,
         queued: false,
-    };
-    save(row, out);
-    crate::domain::keep_entry(d, entry.clone(), None, out);
-    out.push(Request::TierEffect { task, entry, purpose: purpose(d, row, operation, part) });
+    }
 }
 pub(crate) fn step(d: &mut Domain, env: &Env<Limits>, task: u64, entry: u64, out: &mut Queue<Request>) {
     let mut found = None;
@@ -901,15 +914,7 @@ fn cleanup(
             let landing = probe.landing;
             let write = Write::DeleteBranch { branch: probe_branch(&row.tier, run.number, landing) };
             row.probe.as_mut().expect("probe").branch = TierBranch::Pending { entry };
-            effect(
-                d,
-                row,
-                entry,
-                write,
-                6,
-                u16::try_from(landing).expect("range index").checked_add(2).expect("part"),
-                out,
-            );
+            release(d, row, entry, write, out);
         } else {
             wait(task, out);
         }
@@ -926,7 +931,7 @@ fn cleanup(
         {
             let write = Write::DeleteBranch { branch: branch(&row.tier, run.number) };
             row.branch = TierBranch::Pending { entry };
-            effect(d, row, entry, write, 6, 0, out);
+            release(d, row, entry, write, out);
         } else {
             wait(task, out);
         }
@@ -1641,17 +1646,6 @@ impl Domain {
                         && *at == commit) =>
             {
                 Some((9, What::Branch(path_parts(name))))
-            }
-            Write::DeleteBranch { branch: name }
-                if (row.branch == pending && *name == whole && row.result.as_ref()?.applied)
-                    || match &row.probe {
-                        Some(probe) => {
-                            probe.branch == pending && *name == probe_branch(&row.tier, run.number, probe.landing)
-                        }
-                        None => false,
-                    } =>
-            {
-                Some((15, What::Branch(path_parts(name))))
             }
             Write::Dispatch { workflow, branch: name, inputs }
                 if *workflow == configured(self, row).workflow
