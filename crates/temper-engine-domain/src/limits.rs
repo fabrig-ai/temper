@@ -295,7 +295,7 @@ fn phase_worst_case(limits: &Limits) -> Option<(u64, u64)> {
         )?;
     let permission_bytes = Map::<u32, Box<[people::PermissionRole]>>::worst_case(limits.authority.projects)?
         .checked_add(u64::from(limits.authority.projects).checked_mul(u64::from(limits.journal.transcript_bytes))?)?;
-    let load_bytes = loads::resident_worst_case(&limits.loads)?;
+    let (load_bytes, load_workspace) = loads::phase_worst_case(&limits.loads)?;
     if limits.restore_bytes < u64::from(limits.loads.reply_bytes) {
         return None;
     }
@@ -462,7 +462,7 @@ fn phase_worst_case(limits: &Limits) -> Option<(u64, u64)> {
         .checked_add(Queue::<loads::Request>::worst_case(1)?)?;
     // Startup answers move straight into startup_page. They never occupy
     // these ordinary read-answer slots or the deferred read-answer queue.
-    let serving = loads::workspace_worst_case(&limits.loads)?
+    let serving = load_workspace
         .checked_add(
             u64::from(limits.loads.loads).checked_mul(
                 u64::from(limits.loads.reply_bytes)
