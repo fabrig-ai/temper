@@ -503,7 +503,6 @@ fn a_real_reconcile_prunes_accepted_after_kept_and_never_connects_or_writes_orig
     assert_eq!(number, 1);
     assert!(contains(&names, b"permission contents=write;"));
     assert!(contains(&names, b"event push;"));
-    assert_eq!(u64::try_from(names.len()).unwrap(), diagnostics::worst_case().unwrap());
     assert!(values(&service).is_empty());
     assert!(service.engine.as_ref().expect("engine").setup.writes.is_empty(), "reconcile writes no Origin");
     assert!(service.engine.as_ref().expect("engine").forge.starts.is_empty(), "reconcile connects nothing");

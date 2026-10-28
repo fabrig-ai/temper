@@ -979,29 +979,5 @@ pub(super) fn member_login(sign_in: &crate::settings::SignIn, address: &[u8]) ->
     }
     None
 }
-/// The table, every live client, response pages, and fetch sockets' machines.
-#[must_use]
-pub(crate) fn worst_case(limits: crate::limits::SignIn, connections: u32) -> Option<u64> {
-    let client = oauth::client_worst_case(&limits::client(limits))?;
-    let pending = client
-        .checked_add(u64::try_from(size_of::<Pending>()).ok()?)?
-        .checked_add(Queue::<oauth::Request>::worst_case(oauth::MAX_OUT)?)?
-        .checked_add(u64::from(limits.url_bytes).checked_mul(3)?)?
-        .checked_add(8192)?;
-    Map::<Token, Pending>::worst_case(limits.pending)?
-        .checked_add(u64::from(limits.pending).checked_mul(pending)?)?
-        .checked_add(List::<Token>::worst_case(limits.pending)?)?
-        .checked_add(Map::<Token, Reply>::worst_case(connections)?)?
-        .checked_add(u64::from(connections).checked_mul(16_384)?)?
-        .checked_add(Map::<Token, Fetch>::worst_case(limits.fetches)?)?
-        .checked_add(List::<Token>::worst_case(limits.fetches)?)?
-        .checked_add(u64::from(limits.fetches).checked_mul(fetch::worst_case(&limits::fetch(limits))?)?)?
-        .checked_add(Queue::<(Token, oauth::HttpRequest)>::worst_case(limits.pending)?)?
-        .checked_add(u64::from(limits.pending).checked_mul(u64::from(limits.url_bytes).checked_add(16_384)?)?)?
-        .checked_add(List::<crate::startup::application::sign_in::Member>::worst_case(limits.members)?)?
-        .checked_add(u64::from(limits.members).checked_mul(294)?.checked_mul(2)?)?
-        .checked_add(u64::from(limits.url_bytes).checked_mul(12)?)?
-        .checked_add(u64::from(limits.secret_bytes).checked_mul(2)?)
-}
 #[cfg(test)]
 mod tests;

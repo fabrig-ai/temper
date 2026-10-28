@@ -14,11 +14,6 @@ pub const NO_BUNDLE_PAGE: &[u8] = include_bytes!("no-bundle.html");
 
 /// A bundle path's bound (jig's testing/jig-test/src/bundle.rs).
 pub const NAME_BYTES: u32 = 1024;
-/// The digest directory's name: sixteen lowercase hex digits.
-const DIGEST_BYTES: u64 = 16;
-/// The page's `ETag`: a quoted FNV-1a of sixteen hex digits.
-const ETAG_BYTES: u64 = 18;
-
 /// One digest-directory file, typed by the closed list (skein's ui-web.md, 4.4).
 #[derive(Debug)]
 pub struct File {
@@ -60,19 +55,6 @@ pub fn kind(path: &[u8]) -> Option<&'static [u8]> {
         b"webmanifest" => Some(b"application/manifest+json"),
         _ => None,
     }
-}
-/// The bundle's bytes at its limits: its files (the page among them), their names, the digest and the `ETag`.
-#[must_use]
-pub fn worst_case(limits: &crate::limits::Clients) -> Option<u64> {
-    u64::from(limits.bundle_bytes)
-        // Filling retains the old page, measured forge metas, and the new page.
-        .checked_mul(3)?
-        .checked_add(64)?
-        .checked_add(Map::<Box<[u8]>, File>::worst_case(limits.bundle_files)?)?
-        .checked_add(u64::from(limits.bundle_files).checked_mul(u64::from(NAME_BYTES))?)?
-        .checked_add(DIGEST_BYTES)?
-        .checked_add(ETAG_BYTES)?
-        .checked_add(u64::try_from(size_of::<Bundle>()).ok()?)
 }
 
 /// How the clients' listener answers a call the mapping does not claim (client/browser.md, 2.2).

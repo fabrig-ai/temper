@@ -461,44 +461,11 @@ fn parse_seconds(bytes: &[u8]) -> Option<u64> {
     }
     Some(value)
 }
-/// Resolved destinations and their shared TLS construction envelope.
+/// Resolved destinations and their prepared TLS transports.
 #[derive(Debug)]
 pub struct Runtime {
     pub endpoints: List<Endpoint>,
-    pub trust_roots: u32,
-    pub trust_root_bytes: u32,
 }
-impl Runtime {
-    #[must_use]
-    pub fn worst_case(&self) -> Option<u64> {
-        if self.endpoints.is_empty() {
-            return Some(0);
-        }
-        let mut bytes = List::<Endpoint>::worst_case(4)?
-            .checked_add(skein_tls::roots_worst_case(self.trust_roots, self.trust_root_bytes)?)?;
-        for endpoint in &self.endpoints {
-            bytes = bytes.checked_add(u64::try_from(endpoint.origin.len()).ok()?)?;
-        }
-        Some(bytes)
-    }
-}
-/// Per-exchange machines, queues and owned request/response bytes.
-pub(crate) fn worst_case(limits: &Limits) -> Option<u64> {
-    http::worst_case(&limits.http)?
-        .checked_add(tls::worst_case(&limits.tls)?)?
-        .checked_add(u64::try_from(size_of::<Web>()).ok()?)?
-        .checked_add(Queue::<http::Event>::worst_case(ROUTES)?)?
-        .checked_add(Queue::<http::Request>::worst_case(ROUTES)?)?
-        .checked_add(Queue::<Down>::worst_case(ROUTES)?.checked_mul(2)?)?
-        .checked_add(Queue::<tls::Event>::worst_case(ROUTES)?)?
-        .checked_add(u64::from(limits.body).checked_mul(3)?)?
-        .checked_add(
-            u64::from(limits.http.request).checked_add(u64::from(limits.http.send))?.checked_mul(u64::from(ROUTES))?,
-        )?
-        .checked_add(u64::from(tls::largest_room(&limits.tls)).checked_mul(u64::from(ROUTES))?)
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TooLarge;
 
 #[cfg(test)]
 mod tests {

@@ -66,9 +66,6 @@ impl Link {
             skipping: false,
         }
     }
-    pub(crate) const fn line_bytes(&self) -> u32 {
-        self.line_bytes
-    }
     /// The caller reserves three output slots before asking.
     pub(crate) fn ask(&mut self, forge: u16, request: Token, out: &mut Queue<Out>) {
         if self.held.is_some()

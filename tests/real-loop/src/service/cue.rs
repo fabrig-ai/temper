@@ -20,9 +20,6 @@ impl Cue {
     pub(super) fn new(key: RequestKey) -> Self {
         Self { key, logs: BTreeMap::new(), held: false }
     }
-    pub(super) fn memory() -> u64 {
-        (LOGS * 256) as u64
-    }
     pub(super) fn held(&self) -> bool {
         self.held
     }

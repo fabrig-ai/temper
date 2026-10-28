@@ -278,36 +278,5 @@ impl Clients {
     }
 }
 
-/// Retained documents and each route's bounded request, headers, and answer.
-pub(super) fn worst_case(limits: &kit::Limits, transport: &crate::server::Limits) -> Option<u64> {
-    let issuer = kit::provider_limits(limits);
-    let uri = u64::from(issuer.uri_bytes);
-    // The issuer's JSON maximum is six bytes per byte in each of its four
-    // person strings, issuer, audience and nonce; its compact JWT is base64.
-    let claims = u64::from(issuer.claim_bytes)
-        .checked_mul(4)?
-        .checked_add(uri)?
-        .checked_add(u64::from(issuer.client_bytes))?
-        .checked_add(u64::from(issuer.state_bytes))?
-        .checked_mul(6)?
-        .checked_add(1024)?;
-    let jwt = claims.checked_add(2)?.checked_div(3)?.checked_mul(4)?.checked_add(1024)?;
-    let answer = jwt.checked_add(u64::from(issuer.token_bytes).checked_mul(6)?)?.checked_add(128)?;
-    let discovery = uri.checked_mul(30)?.checked_add(2048)?;
-    // A 3072-bit RSA JWK is below 1024 bytes including its thumbprint and fields.
-    let keys = 1024_u64;
-    skein_lib::Map::<Token, Reply>::worst_case(transport.connections)?
-        .checked_add(discovery)?
-        .checked_add(keys)?
-        .checked_add(
-            u64::from(transport.connections).checked_mul(
-                u64::from(issuer.request_bytes)
-                    .checked_add(u64::from(transport.http.head))?
-                    .checked_add(answer.max(discovery).max(keys))?
-                    .checked_add(u64::from(transport.http.send))?,
-            )?,
-        )
-}
-
 #[cfg(test)]
 mod tests;

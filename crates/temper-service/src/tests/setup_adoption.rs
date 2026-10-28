@@ -247,7 +247,7 @@ fn records_fake_restart_reconciles_restored_repositories_and_adopts_only_the_mis
 fn records_fake_given_uses_the_webhooks_listener_without_a_file_secret() {
     for hooks in [false, true] {
         let config = configured(hooks);
-        let (endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+        let endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
         let (settings, _) = settings::fixed(&config, &endpoints).unwrap();
         let host::Kind::Forgejo(given) = &settings.forges.get(0).unwrap().kind else { panic!("Forgejo Given") };
         assert_eq!(given.listener, if hooks { Some(([127, 0, 0, 1], 7101).into()) } else { None });
@@ -412,7 +412,7 @@ fn a_stopped_old_form_fake_adoption_names_its_step_and_drops_the_remaining_repos
 fn old_form_fake_given_uses_the_webhooks_listener_only_with_a_file_secret() {
     for hooks in [false, true] {
         let config = old_form_configured(hooks);
-        let (endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+        let endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
         let (settings, _) = settings::fixed(&config, &endpoints).unwrap();
         let host::Kind::Forgejo(given) = &settings.forges.get(0).unwrap().kind else { panic!("Forgejo Given") };
         assert_eq!(given.listener, if hooks { Some(([127, 0, 0, 1], 7101).into()) } else { None });
@@ -453,7 +453,7 @@ fn old_form_owned_and_managed_serve_reads_without_start_time_writing_plans() {
                 asked: false,
             }]
         );
-        let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+        let mut endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
         let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
         assert!(setup.lifecycle.adoptions.is_empty());
         assert!(setup.runs.is_empty());
@@ -478,7 +478,7 @@ fn old_form_owned_and_managed_serve_reads_without_start_time_writing_plans() {
 #[test]
 fn an_unserved_old_form_fake_drops_its_adoptions_and_names_the_exclusion_without_connecting() {
     let config = old_form_configured(false);
-    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+    let mut endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
     endpoints.forges.get_mut(0).unwrap().address = skein_io::Addr::Ip(([192, 0, 2, 7], 9).into());
     let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
     assert!(endpoints.forges.get(0).unwrap().access.is_none());

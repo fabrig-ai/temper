@@ -182,7 +182,7 @@ impl Host for ServiceHost {
         self.service.is_empty()
     }
     fn worst_case(&self) -> u64 {
-        self.service.worst_case() + 8 * 1024 * 1024
+        8 * 1024 * 1024
     }
     fn operations(&self) -> u32 {
         self.service.operations()

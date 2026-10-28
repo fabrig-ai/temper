@@ -6,12 +6,10 @@ use skein_oauth_accounts as driver;
 pub(super) fn resolve(engine: &config::Engine) -> Result<service::AccountsRuntime, String> {
     let mut runtime = service::AccountsRuntime {
         providers: List::with_capacity(u32::try_from(engine.llm.providers.len()).expect("provider count")),
-        trust_roots: 0,
-        trust_root_bytes: 0,
     };
     for provider in &engine.llm.providers {
         let Some(registration) = &provider.sign_in else { continue };
-        let endpoint = endpoint(&registration.token, &registration.endpoint_transport, &mut runtime)?;
+        let endpoint = endpoint(&registration.token, &registration.endpoint_transport)?;
         let mut origins = List::<driver::Origin>::with_capacity(3);
         for uri in [Some(&*registration.issuer), Some(&*registration.keys), registration.revocation.as_deref()]
             .into_iter()
@@ -24,7 +22,7 @@ pub(super) fn resolve(engine: &config::Engine) -> Result<service::AccountsRuntim
             origins
                 .push(driver::Origin {
                     uri: origin.into(),
-                    endpoint: endpoint_for_origin(origin, &registration.endpoint_transport, &mut runtime)?,
+                    endpoint: endpoint_for_origin(origin, &registration.endpoint_transport)?,
                 })
                 .expect("three configured origins");
         }
@@ -32,16 +30,11 @@ pub(super) fn resolve(engine: &config::Engine) -> Result<service::AccountsRuntim
     }
     Ok(runtime)
 }
-fn transport(
-    configured: &config::Transport,
-    runtime: &mut service::AccountsRuntime,
-) -> Result<driver::Transport, String> {
+fn transport(configured: &config::Transport) -> Result<driver::Transport, String> {
     Ok(match configured {
         config::Transport::Plaintext => driver::Transport::Plaintext,
         config::Transport::Tls { server_name: name, trust: file } => {
-            let (trust, count, each) = trust(file.as_deref())?;
-            runtime.trust_roots = runtime.trust_roots.checked_add(count).ok_or("trust count")?;
-            runtime.trust_root_bytes = runtime.trust_root_bytes.max(each);
+            let trust = trust(file.as_deref())?;
             driver::Transport::Tls { server_name: server_name(name)?, trust }
         }
     })
@@ -58,19 +51,11 @@ fn origin(uri: &[u8]) -> Result<(&[u8], u16), String> {
         uri[start..].iter().position(|byte| matches!(byte, b'/' | b'?' | b'#')).map_or(uri.len(), |at| start + at);
     Ok((&uri[..end], port))
 }
-fn endpoint(
-    uri: &[u8],
-    configured: &config::Transport,
-    runtime: &mut service::AccountsRuntime,
-) -> Result<driver::Endpoint, String> {
+fn endpoint(uri: &[u8], configured: &config::Transport) -> Result<driver::Endpoint, String> {
     let (origin, _) = origin(uri)?;
-    endpoint_for_origin(origin, configured, runtime)
+    endpoint_for_origin(origin, configured)
 }
-fn endpoint_for_origin(
-    uri: &[u8],
-    configured: &config::Transport,
-    runtime: &mut service::AccountsRuntime,
-) -> Result<driver::Endpoint, String> {
+fn endpoint_for_origin(uri: &[u8], configured: &config::Transport) -> Result<driver::Endpoint, String> {
     use std::net::ToSocketAddrs;
     let (_, port) = origin(uri)?;
     let authority =
@@ -93,5 +78,5 @@ fn endpoint_for_origin(
         .map_err(|why| why.to_string())?
         .next()
         .ok_or("sign-in endpoint has no address")?;
-    Ok(driver::Endpoint { address, transport: transport(configured, runtime)? })
+    Ok(driver::Endpoint { address, transport: transport(configured)? })
 }

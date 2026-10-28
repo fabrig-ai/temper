@@ -4,7 +4,7 @@ use service::clients::fetch::{Endpoint, Runtime, Transport};
 use skein_lib::List;
 use std::net::ToSocketAddrs;
 pub(super) fn resolve(sign_in: Option<&service::startup::SignIn>) -> Result<Runtime, String> {
-    let mut runtime = Runtime { endpoints: List::<Endpoint>::with_capacity(4), trust_roots: 0, trust_root_bytes: 0 };
+    let mut runtime = Runtime { endpoints: List::<Endpoint>::with_capacity(4) };
     let Some(sign_in) = sign_in else { return Ok(runtime) };
     for (name, uri) in sign_in.endpoints.values() {
         let field = format!("application.sign_in.google.endpoints.{}", String::from_utf8_lossy(name));
@@ -24,9 +24,7 @@ pub(super) fn resolve(sign_in: Option<&service::startup::SignIn>) -> Result<Runt
                 Transport::Plaintext
             }
             Some(service::startup::Transport::Tls { server_name: name, trust: file }) => {
-                let (trust, count, each) = trust(file.as_deref()).map_err(|why| format!("{field}.transport: {why}"))?;
-                runtime.trust_roots = runtime.trust_roots.checked_add(count).ok_or("trust count")?;
-                runtime.trust_root_bytes = runtime.trust_root_bytes.max(each);
+                let trust = trust(file.as_deref()).map_err(|why| format!("{field}.transport: {why}"))?;
                 Transport::Tls {
                     server_name: server_name(name)
                         .map_err(|why| format!("{field}.transport.tls.server_name: {why}"))?,
@@ -34,9 +32,7 @@ pub(super) fn resolve(sign_in: Option<&service::startup::SignIn>) -> Result<Runt
                 }
             }
             None => {
-                let (trust, count, each) = trust(None).map_err(|why| format!("{field}: {why}"))?;
-                runtime.trust_roots = runtime.trust_roots.checked_add(count).ok_or("trust count")?;
-                runtime.trust_root_bytes = runtime.trust_root_bytes.max(each);
+                let trust = trust(None).map_err(|why| format!("{field}: {why}"))?;
                 Transport::Tls { server_name: server_name(host).map_err(|why| format!("{field}: {why}"))?, trust }
             }
         };

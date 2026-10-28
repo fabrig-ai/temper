@@ -429,22 +429,11 @@ impl Host for ServiceHost {
             }
             let mut service = self.prepare_service();
             if self.cluster.is_some() {
-                assert!(service.worst_case() <= self.envelope.0, "cluster fits admission");
                 assert!(service.operations() <= self.envelope.1, "cluster operations fit admission");
             } else if self.fixture.is_some() || self.github.is_some() {
-                assert!(
-                    service.worst_case() <= self.envelope.0,
-                    "bound ports fit deferred admission: {} <= {}",
-                    service.worst_case(),
-                    self.envelope.0
-                );
                 assert_eq!(service.operations(), self.envelope.1, "preparation preserves operations");
             } else {
-                assert_eq!(
-                    (service.worst_case(), service.operations()),
-                    self.envelope,
-                    "preparation preserves admission"
-                );
+                assert_eq!((0, service.operations()), self.envelope, "preparation preserves admission");
             }
             if self.github_seeded {
                 service.adopt_signals(self.signals).expect("service signal pipe");
@@ -565,21 +554,6 @@ impl Host for ServiceHost {
         } else {
             self.service.as_ref().is_some_and(temper_service::Service::is_empty)
         }
-    }
-    fn worst_case(&self) -> u64 {
-        self.envelope.0
-            + if self.cluster.is_some() { crate::cluster::Runs::MEMORY } else { 0 }
-            + if self.restartable {
-                Queue::<Complete>::worst_case(self.envelope.1).expect("host completions")
-                    + Queue::<Submit>::worst_case(self.envelope.1).expect("host submissions")
-                    + u64::try_from(LIVES * std::mem::size_of::<Life>()).expect("life records")
-                    + crate::cluster::Runs::MEMORY
-            } else {
-                0
-            }
-            + watch::Watch::memory()
-            + cue::CUES as u64 * Cue::memory()
-            + if self.fixture.is_some() { hooks::Hooks::memory() } else { 0 }
     }
     fn operations(&self) -> u32 {
         self.envelope.1

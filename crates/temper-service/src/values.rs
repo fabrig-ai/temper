@@ -71,9 +71,6 @@ impl Identities {
         }
         numbers
     }
-    pub(crate) fn worst_case(count: u32) -> Option<u64> {
-        Map::<u32, Generations>::worst_case(count)
-    }
 }
 #[derive(Debug)]
 pub struct Values {

@@ -126,7 +126,7 @@ fn the_standalone_envelope_retains_no_descriptors() {
     let mut owned = Vec::new();
     let service = super::prepare(&configuration::directories(&directory), &document, &mut owned)
         .expect("same standalone preparation");
-    assert_eq!(envelope, (service.worst_case(), service.operations()));
+    assert_eq!(envelope, (0, service.operations()));
     drop(service);
     super::close(owned);
     assert_no_descriptors_in(&directory);

@@ -41,8 +41,6 @@ fn routing_service_at(
             number: 1,
             address: ([127, 0, 0, 1], 3000).into(),
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         })
         .unwrap();
     let mut service = crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap();
@@ -136,7 +134,6 @@ fn row(service: &mut crate::Service, item: Item, bytes: &[u8]) {
 fn the_host_starts_after_loading_with_temper_urls_and_the_configured_limits() {
     let mut service = service(8, Duration::from_secs(3600));
     let state = manifest(&mut service, 1);
-    assert_eq!(u64::try_from(state.len()).unwrap(), STATE_TEXT_BYTES);
     let page = service.setup_page(1, &state, Time::ZERO).unwrap();
     for expected in [
         b"temper-".as_slice(),
@@ -475,8 +472,6 @@ fn tls_forges() -> (crate::settings::Engine, List<crate::ForgeRuntime>) {
                     server_name: skein_tls::Name::new(name).unwrap(),
                     trust,
                 },
-                trust_roots: 1,
-                trust_root_bytes: 412,
             })
             .unwrap();
     }
@@ -489,11 +484,12 @@ fn tls_forges() -> (crate::settings::Engine, List<crate::ForgeRuntime>) {
 )]
 fn each_github_tls_entry_keeps_its_prepared_name_trust_and_address() {
     let (config, runtime) = tls_forges();
-    let (mut endpoints, _) = crate::forge::prepare(&config, runtime).unwrap();
+    let mut endpoints = crate::forge::prepare(&config, runtime).unwrap();
     let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
     assert_eq!(setup.served.len(), 2);
     let (settings, _) = setup.pending.unwrap();
     assert_eq!(settings.forges.len(), 2);
+    assert_eq!(settings.user_agent.as_ref(), crate::forge::USER_AGENT.as_bytes());
     for endpoint in &endpoints.forges {
         let mut entry = None;
         for candidate in &settings.forges {
@@ -513,26 +509,6 @@ fn each_github_tls_entry_keeps_its_prepared_name_trust_and_address() {
         assert_eq!(server_name, name);
         assert_eq!(alloc::format!("{trust:?}"), alloc::format!("{prepared:?}"));
     }
-}
-#[test]
-fn tls_selects_a_larger_host_price_than_plaintext() {
-    let (mut config, mut runtime) = tls_forges();
-    // Both transports use the ciphertext room TLS requires as their common io ceiling.
-    config.jig.limits.io.output = skein_tls::client::largest_room(&config.limits.forge_component.tls);
-    for index in 0..runtime.len() {
-        runtime.get_mut(index).unwrap().address.set_ip([127, 0, 0, 1].into());
-    }
-    let (mut endpoints, _) = crate::forge::prepare(&config, runtime).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
-    let (mut settings, _) = setup.pending.unwrap();
-    let tls = host::worst_case(&setup.env.limits, &settings).unwrap();
-    for index in 0..settings.forges.len() {
-        let entry = settings.forges.get_mut(index).unwrap();
-        let host::Transport::Tls { server_name, .. } = &entry.transport else { panic!("TLS entry") };
-        let skein_tls::Server::Dns(name) = server_name.server() else { panic!("fixture DNS name") };
-        entry.transport = host::Transport::Plaintext { name: Some(name.as_bytes().into()) };
-    }
-    assert!(tls > host::worst_case(&setup.env.limits, &settings).unwrap());
 }
 #[test]
 fn admitted_tls_starts_after_rows_and_serves_a_local_manifest() {
@@ -580,26 +556,6 @@ fn contains(bytes: &[u8], needle: &[u8]) -> bool {
         }
     }
     false
-}
-#[test]
-fn setup_memory_includes_the_whole_host_and_its_owner() {
-    // Setup's whole heap including its host and owner, a quarter above 10-28's 1,339,887,062 bytes.
-    const SETUP_HEAP_CEILING: u64 = 1_700_000_000;
-    let mut config = fixtures::engine();
-    config.forges[0].kind = crate::settings::Kind::GitHub;
-    config.identities[0].token = Secret::new(Box::new([]));
-    config.identities[0].login = Box::new([]);
-    config.identities[0].author.name = Box::new([]);
-    config.identities[0].author.email = Box::new([]);
-    config.forges[0].api_token = None;
-    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-    let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
-    let (settings, _) = setup.pending.unwrap();
-    assert_eq!(settings.user_agent.as_ref(), crate::forge::USER_AGENT.as_bytes());
-    let whole = worst_case(&config, &endpoints, 2).unwrap();
-    assert!(whole <= SETUP_HEAP_CEILING);
-    assert!(whole > host::worst_case(&setup.env.limits, &settings).unwrap());
-    assert!(accounted(8, 8, false) > accounted(1, 1, false), "runs/states change the admitted shell price");
 }
 #[test]
 fn every_host_unusable_arm_has_an_operator_path() {
@@ -663,7 +619,7 @@ fn invalid_host_limits_stop_after_load_and_setup_overrides_are_checked() {
     config.forges[0].api_token = None;
     config.limits.forge_component.inner = 13;
     config.limits.picker.page = 1;
-    let (mut endpoints, _) = crate::forge::prepare(&fixtures::engine(), fixtures::forge_runtime()).unwrap();
+    let mut endpoints = crate::forge::prepare(&fixtures::engine(), fixtures::forge_runtime()).unwrap();
     service.engine.as_mut().expect("engine").setup =
         prepare(&config, &mut endpoints, &fixtures::seeds().crypto, 2, false).unwrap();
     advance(service.engine.as_mut().expect("engine"));
@@ -709,10 +665,6 @@ fn configured(runs: u32, states: u32, tls: bool) -> (crate::settings::Engine, Li
     config.limits.setup.states = states;
     fixtures::fill_files(&mut config);
     (config, runtime)
-}
-fn accounted(runs: u32, states: u32, tls: bool) -> u64 {
-    let (config, runtime) = configured(runs, states, tls);
-    crate::Service::engine(config, &fixtures::seeds(), None, runtime).unwrap().worst_case()
 }
 
 #[path = "setup_reachable.rs"]
@@ -1077,7 +1029,7 @@ fn local_given_uses_the_repository_capacity_no_orgs_and_configured_listener() {
     let mut config = local_config(true, false);
     config.webhooks =
         Some(skein_forge_connection::hooks::Webhooks { listener: skein_io::Addr::Ip(([127, 0, 0, 1], 7101).into()) });
-    let (endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+    let endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
     assert!(endpoints.forges.get(0).unwrap().access.is_none());
     let (host, _) = settings::fixed(&config, &endpoints).unwrap();
     let entry = host.forges.get(0).unwrap();
@@ -1691,16 +1643,14 @@ fn the_demo_waits_for_started_only_under_the_box_even_with_retained_access() {
         let configured = crate::startup::application::configured(&config);
         assert!(configured[0].asked);
         assert_eq!(configured[0].mode, domain::Mode::Fake);
-        let (endpoints, roots) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
-        let owned = skein_forge_connection::settings::owned_bytes(&endpoints).unwrap();
+        let endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
         let io = config.jig.limits.io;
         let mut service = crate::Service::prepared(
             config,
             &fixtures::seeds(),
             None,
-            (endpoints, roots, owned),
+            endpoints,
             None,
-            0,
             io,
             if under_box { Some(256) } else { None },
         )
@@ -1885,7 +1835,7 @@ fn setup_reconciliation_waits_for_the_mark() {
     kept_record(&mut previous.store, 1, Item::AdminToken, b"test-admin");
     let mut service = fixtures::restarting_from(previous);
     let config = local_config(true, false);
-    let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+    let mut endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
     let batch = root::max_out(&service.engine.as_ref().unwrap().env.limits).checked_add(SETUP_HEADROOM).unwrap();
     let setup = prepare(&config, &mut endpoints, &fixtures::seeds().crypto, batch, false).unwrap();
     service.engine.as_mut().unwrap().setup = setup;

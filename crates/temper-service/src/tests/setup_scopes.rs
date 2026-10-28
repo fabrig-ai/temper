@@ -95,7 +95,7 @@ fn preparations_four_scopes_grant_adopt_and_without_repository_it_is_refused_at_
             }
         }
         fixtures::fill_files(&mut config);
-        let (mut endpoints, _) = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
+        let mut endpoints = crate::forge::prepare(&config, fixtures::forge_runtime()).unwrap();
         let access = endpoints.forges.get_mut(0).unwrap().access.take().expect("file access");
         let mut service = crate::Service::engine(config, &fixtures::seeds(), None, fixtures::forge_runtime()).unwrap();
         service.engine.as_mut().expect("engine").store = fixtures::records_store();

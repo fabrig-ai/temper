@@ -432,7 +432,7 @@ fn start_with_worker(
     projects: &[(u32, u64)],
     stored: Option<crate::store::Store>,
     worker: Option<crate::Worker>,
-    worker_bytes: u64,
+    _worker_bytes: u64,
     two_forges: bool,
     under_box: bool,
 ) -> crate::Service {
@@ -452,8 +452,6 @@ fn start_with_worker(
             number: 2,
             address: ([127, 0, 0, 1], 3001).into(),
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         };
         runtime = skein_lib::List::with_capacity(2);
         runtime.push(first).unwrap();
@@ -520,15 +518,13 @@ fn start_with_worker(
     };
     let worker_io = if worker.is_some() { Some(worker_settings().jig.limits.io) } else { None };
     let io = crate::startup::checks::process_io(&settings.jig.limits.io, worker_io.as_ref()).unwrap();
-    let (endpoints, roots) = crate::forge::prepare(&settings, runtime).unwrap();
-    let owned = skein_forge_connection::settings::owned_bytes(&endpoints).unwrap();
+    let endpoints = crate::forge::prepare(&settings, runtime).unwrap();
     let mut service = crate::Service::prepared(
         settings,
         &seeds(),
         None,
-        (endpoints, roots, owned),
+        endpoints,
         worker,
-        worker_bytes,
         io,
         if under_box { Some(system::BOX_BYTES) } else { None },
     )
@@ -944,8 +940,6 @@ pub fn forge_runtime() -> skein_lib::List<crate::ForgeRuntime> {
             number: 1,
             address: core::net::SocketAddr::from(([127, 0, 0, 1], 3000)),
             transport: skein_forge_connection::settings::Transport::Plaintext { name: None },
-            trust_roots: 0,
-            trust_root_bytes: 0,
         })
         .unwrap();
     runtime

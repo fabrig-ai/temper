@@ -730,7 +730,7 @@ fn check_files(parsed: &Parsed, files: &settings::Files) -> Result<(), Problems>
     }
     if problems.is_empty() { Ok(()) } else { Err(problems) }
 }
-// The worker's and system's sums still use these helpers; c1 and the worker's owner remove them.
+// The worker's sums still use these helpers; its owner removes them.
 pub(crate) type MemoryTerm = (&'static str, u64);
 pub(crate) fn memory_sum(terms: &[MemoryTerm]) -> Option<u64> {
     let mut bytes = 0_u64;
@@ -744,7 +744,7 @@ struct CheckedStart {
     engine: settings::Engine,
     worker: Option<settings::Worker>,
     io: skein_io::Limits,
-    forges: (skein_forge_connection::Settings, u64, u64),
+    forges: skein_forge_connection::Settings,
 }
 /// Every check startup makes, without constructing a service.
 /// # Errors
@@ -756,7 +756,7 @@ pub fn check(
     files: &settings::Files,
     agent: &settings::Agent,
     seeds: &settings::Seeds,
-    accounts: Option<&AccountsRuntime>,
+    _accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<(), Problems> {
@@ -765,7 +765,7 @@ pub fn check(
         check_worker_part(&mut part, files, agent)?;
         return Ok(());
     }
-    checked_start(document, directories, files, Some(agent), seeds, accounts, forges, setup)?;
+    checked_start(document, directories, files, Some(agent), seeds, forges, setup)?;
     Ok(())
 }
 #[expect(
@@ -934,14 +934,12 @@ fn checked_start_with(
     let prepared_forges = prepare_forges(&engine, forges)?;
     Ok(CheckedStart { not_set_up, engine, worker, io, forges: prepared_forges })
 }
-#[expect(clippy::too_many_arguments, reason = "the Stock entry retains the existing startup inputs")]
 fn checked_start(
     document: &[u8],
     directories: &config::Directories,
     files: &settings::Files,
     agent: Option<&settings::Agent>,
     seeds: &settings::Seeds,
-    _accounts: Option<&AccountsRuntime>,
     forges: List<crate::ForgeRuntime>,
     setup: Option<&temper_forge_setup::check::Checked>,
 ) -> Result<CheckedStart, Problems> {
@@ -1004,11 +1002,6 @@ pub fn with_setup_given(
 ) -> Result<Service, Problems> {
     let CheckedStart { engine, worker, io, forges, not_set_up } =
         checked_start_with(document, directories, files, agent, seeds, forges, setup, given)?;
-    let worker_bytes = match &worker {
-        Some(worker) => crate::worker_worst_case(worker, agent.expect("checked local agent"), &engine.limits)
-            .ok_or(problem(indexed(0).member(b"memory_bytes"), What::Jig(config::What::Bound)))?,
-        None => 0,
-    };
     let worker = match worker {
         Some(worker) => match Worker::new(
             &worker,
@@ -1023,7 +1016,7 @@ pub fn with_setup_given(
         },
         None => None,
     };
-    match Service::prepared(engine, seeds, accounts, forges, worker, worker_bytes, io, box_line_bytes) {
+    match Service::prepared(engine, seeds, accounts, forges, worker, io, box_line_bytes) {
         Ok(mut service) => {
             for number in &not_set_up {
                 crate::setup::lifecycle::state(
@@ -1068,14 +1061,11 @@ pub fn with_setup(
 fn prepare_forges(
     engine: &settings::Engine,
     forges: List<crate::ForgeRuntime>,
-) -> Result<(skein_forge_connection::Settings, u64, u64), Problems> {
-    let (settings, roots) = match crate::forge::prepare(engine, forges) {
-        Ok(prepared) => prepared,
-        Err(found) => return Err(Problems::jig(found, &Path::root())),
-    };
-    let owned = skein_forge_connection::settings::owned_bytes(&settings)
-        .ok_or(problem(Path::root().member(b"engine").member(b"memory_bytes"), What::Jig(config::What::Bound)))?;
-    Ok((settings, roots, owned))
+) -> Result<skein_forge_connection::Settings, Problems> {
+    match crate::forge::prepare(engine, forges) {
+        Ok(settings) => Ok(settings),
+        Err(found) => Err(Problems::jig(found, &Path::root())),
+    }
 }
 
 /// The worker-only document, with no deployment or engine declarations.

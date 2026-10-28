@@ -234,7 +234,11 @@ fn stopping_drops_pending_sign_ins_and_unsent_fetch_records() {
     assert!(clients.google.as_ref().unwrap().closed());
 }
 #[test]
-fn the_full_pending_table_fits_its_declared_memory_envelope() {
+fn the_full_pending_table_stays_under_its_measured_heap_ceiling() {
+    // Full pending sign-in table: a quarter above the measured 227,889-byte peak,
+    // rounded up to two significant digits. Move by hand only in the commit of
+    // a real change that passes this ceiling.
+    const PENDING_HEAP_CEILING: u64 = 290_000;
     let settings = world::configured();
     let limits = fixtures::engine().limits.sign_in;
     let seeds = fixtures::seeds();
@@ -276,6 +280,6 @@ fn the_full_pending_table_fits_its_declared_memory_envelope() {
         google.keep_pending(Token::new(u64::from(number)), pending);
     }
     let measured = meter.end();
-    meter.check(measured, worst_case(limits, 8).unwrap(), &"Google pending sign-ins");
+    meter.check(measured, PENDING_HEAP_CEILING, &"Google pending sign-ins");
     assert_eq!(google.pending.len(), limits.pending);
 }

@@ -55,7 +55,7 @@ impl skein_shell::Host for Host {
         self.service.is_empty()
     }
     fn worst_case(&self) -> u64 {
-        self.service.worst_case()
+        0
     }
     fn operations(&self) -> u32 {
         self.service.operations()
