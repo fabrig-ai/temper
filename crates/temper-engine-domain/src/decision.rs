@@ -25,12 +25,13 @@ pub struct Limits {
     /// Journal commit count estimate for memory pricing; counted in the
     /// root's default admission watermark.
     pub commits: u32,
-    /// Estimate of deliveries held across decisions until durability permits release.
+    /// Pricing estimate of deliveries held across decisions until durability permits release;
+    /// it need not cover the door's outputs.
     pub held: u32,
     /// Maximum unique writes per commit, including its automatically saved deployment header; a
     /// decision has one fewer slot.
     pub writes: u32,
-    /// Maximum owned deliveries in one decision's store-edge buffers.
+    /// The door's outputs, counted in the admission watermark's default; no decision's cap.
     pub deliveries: u32,
     /// Maximum transcript bytes or deep owned bytes in a wrapped child row; excess writes return
     /// ownership.
@@ -241,7 +242,7 @@ pub enum JournalOutput {
     Stop,
 }
 
-/// One root route's bounded transient writes and deliveries; it owns their
+/// One root route's bounded transient writes and uncapped deliveries; it owns their
 /// payloads until accepted or returned on refusal (domain/root.md, 4).
 /// This value knows no durability and emits nothing on drop.
 #[derive(Debug)]
@@ -249,6 +250,8 @@ pub struct Decision {
     limits: Limits,
     writes: List<Write>,
     deliveries: Queue<Delivery>,
+    /// Only a write overrun: jig's store refuses commits past `journal.writes`
+    /// (jig-protocol-store's `commits::operations`), including the header's slot.
     overrun: bool,
     batch: SkeinDecision<Write, crate::Output>,
 }
@@ -270,14 +273,14 @@ impl Decision {
     }
 
     /// Open the root's uncapped journal before routing an atomic child cohort.
-    /// The private buffers retain the store's per-commit operation edge.
+    /// The write buffer retains the store's per-commit write edge; outputs are uncapped.
     #[must_use]
     pub fn decide(journal: &mut Journal, limits: &Limits) -> Decision {
         assert!(worst_case(limits).is_some(), "valid root journal limits");
         Decision {
             limits: *limits,
             writes: List::with_capacity(limits.writes.checked_sub(1).expect("header slot reserved")),
-            deliveries: Queue::with_capacity(limits.deliveries),
+            deliveries: Queue::uncapped(),
             overrun: false,
             batch: journal.decide(),
         }
@@ -396,8 +399,8 @@ impl Decision {
         result
     }
 
-    /// Retain one root effect for the decision, without releasing or issuing it. Bounds or capacity
-    /// refusal returns ownership; successful admission ends through journal release after
+    /// Retain one root effect for the decision, without releasing or issuing it. Per-delivery
+    /// bounds refusal returns ownership; successful admission ends through journal release after
     /// durability.
     #[expect(clippy::result_large_err, reason = "bounded assignment ownership is returned intact on admission refusal")]
     pub fn deliver(&mut self, limits: &Limits, delivery: Delivery) -> Result<(), Delivery> {
@@ -494,22 +497,14 @@ impl Decision {
         if !within {
             return Err(delivery);
         }
-        self.carry_delivery(limits, delivery)
+        self.carry_delivery(limits, delivery);
+        Ok(())
     }
 
     /// Carry the owner's assembled output without inspecting its value.
-    #[expect(clippy::result_large_err, reason = "a refused assembled output returns ownership")]
-    pub(crate) fn carry_delivery(&mut self, limits: &Limits, delivery: Delivery) -> Result<(), Delivery> {
+    pub(crate) fn carry_delivery(&mut self, limits: &Limits, delivery: Delivery) {
         assert!(*limits == self.limits, "decision uses configured limits");
-        if self.deliveries.len() >= self.limits.deliveries {
-            self.overrun = true;
-            return Err(delivery);
-        }
-        let result = self.deliveries.try_push(delivery);
-        if result.is_err() {
-            self.overrun = true;
-        }
-        result
+        self.deliveries.push(delivery);
     }
 }
 
@@ -538,20 +533,18 @@ pub fn accept_routed(
     mut decision: Decision,
     persist_header: bool,
 ) -> Result<(), Decision> {
-    // A decision must fit the store's commit edge even on an uncapped
-    // journal. Fail before accepting any prefix; failed(0) stops even a
-    // journal with no issued commit. Accepting the empty batch then closes
-    // its open decision without emitting anything, including older outputs.
+    // Only writes must fit the store's commit edge: jig-protocol-store's
+    // commits::operations refuses more than journal.writes, including the
+    // header. Outputs are uncapped. Fail before accepting any prefix;
+    // failed(0) stops even a journal with no issued commit. Accepting the empty
+    // batch then closes its open decision without emitting anything, including older outputs.
     let writing = (persist_header && counters.dirty()) || !decision.writes.is_empty();
     if decision.overrun || (writing && counters.deployment().commits == u64::MAX) {
         journal.failed(0);
         journal.accept(decision.batch);
         return Ok(());
     }
-    if decision.limits != *limits
-        || decision.writes.len() >= limits.writes
-        || decision.deliveries.len() > limits.deliveries
-    {
+    if decision.limits != *limits || decision.writes.len() >= limits.writes {
         return Err(decision);
     }
     let mut batch = decision.batch;
@@ -659,12 +652,7 @@ pub fn uncommitted(journal: &mut Journal, number: u64, out: &mut Queue<Output>) 
 /// overflow return `None`; no state or effect is created.
 #[must_use]
 pub fn worst_case(limits: &Limits) -> Option<u64> {
-    if limits.commits == 0
-        || limits.writes == 0
-        || limits.held < limits.deliveries
-        || limits.deliveries == 0
-        || limits.run_bytes == 0
-    {
+    if limits.commits == 0 || limits.writes == 0 || limits.deliveries == 0 || limits.run_bytes == 0 {
         return None;
     }
     Journal::worst_case(&journal_limits(limits))?

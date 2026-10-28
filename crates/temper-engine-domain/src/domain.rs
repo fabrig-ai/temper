@@ -557,8 +557,7 @@ pub(crate) fn internal(number: u64) -> ReplyTo {
 }
 
 pub(crate) fn emit(decision: &mut Decision, limits: &Limits, delivery: Delivery) {
-    // Overrun marks the decision failed; close suppresses the whole cohort.
-    let _refused = decision.carry_delivery(&limits.journal, delivery);
+    decision.carry_delivery(&limits.journal, delivery);
 }
 
 pub(crate) fn save(decision: &mut Decision, limits: &Limits, write: Write) {
