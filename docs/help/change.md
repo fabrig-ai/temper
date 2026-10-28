@@ -15,13 +15,15 @@ A change is a task that writes one repository's branch and lands it: its pull re
   its address, `step:` and the step, `way: turn · landing task N`
   where its project lands by turn, the CI at its head, its gates, and
   how many repairs, resolutions and updates it has used of its limits.
-- **Its result** is the change landed: its merge commit, its pull
-  request with its address, then what the landing passed as the change
-  saw it: `checks at HEAD:` each check at the landed head with its
-  conclusion, `repairs: N:` why each repair was asked, and `reviews:`
-  each verdict at the head it judged, cut from the end and marked when
-  long. It names no check or test the change didn't see. Or it fails,
-  or is cancelled, as any task.
+- **Its result** is the change landed and cleared: its merge commit,
+  its pull request with its address, then what the landing passed as
+  the change saw it: `checks at HEAD:` each check at the landed head
+  with its conclusion, `repairs: N:` why each repair was asked, and
+  `reviews:` each verdict at the head it judged, cut from the end and
+  marked when long. It names no check or test the change didn't see.
+  It comes as the change lands in a repository with no tier, and once
+  every tier of its repository has cleared its landing otherwise
+  (temper help tier). Or it fails, or is cancelled, as any task.
 
 ## How it changes
 
@@ -61,6 +63,10 @@ its head and it waits in no queue: `gating` follows `opening`, then:
   output, and its new head makes it ready again;
 - `landed`: main was fast-forwarded to its candidate.
 
+In a repository with tiers, a landed change then verifies, its step
+still `landed`: its task lives on, its branch kept, until its tiers
+clear its landing.
+
 After a release, `reopening` reopens its closed pull request and
 `recreating` pushes its missing branch again.
 
@@ -89,7 +95,7 @@ task, the change's own or its writer's or reviewer's, `held: task N
   is held.
 - **Bounded work:** past its limit of repairs, resolutions or updates,
   the change holds rather than trying again.
-- **The parent hears its result,** landed or not.
+- **The parent hears its result,** cleared or not.
 
 ## Acting on it
 
