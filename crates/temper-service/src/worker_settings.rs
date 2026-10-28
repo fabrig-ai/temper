@@ -198,7 +198,9 @@ pub(crate) fn memory_terms(
         io::Addr::InProcess(_) => 0,
         io::Addr::Ip(_) => crate::worker::remote_worst_case(u32::try_from(jig.name.len()).ok()?, crate::worker::NOTES)?,
     };
+    // The engine entrance and its held records have the same edge cap.
     let routing = Queue::<root::Event>::worst_case(crate::worker::ENGINE_EVENTS)?
+        .checked_mul(2)?
         .checked_add(Queue::<link::Request>::worst_case(link::MAX_OUT_DOWN)?)?
         .checked_add(Map::<Token, host::Process>::worst_case(jig.slots)?)?
         .checked_add(Map::<Token, Token>::worst_case(jig.slots.checked_mul(5)?)?)?

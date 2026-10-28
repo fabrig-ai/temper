@@ -45,9 +45,12 @@ pub struct Worker {
     out: Queue<root::Request>,
     pub(crate) events: Queue<root::Event>,
     /// What the link brought from the engine, in its order, until the
-    /// root takes it: new work waits here at the watermark, and the
-    /// engine's later records wait behind it.
+    /// root takes it or holds it at the watermark.
     pub(crate) engine: Queue<root::Event>,
+    /// The engine's new work that waits at the watermark, and the records
+    /// behind it that may not pass it (W5), in their order
+    /// (`domain/worker.md`, 3.1; skein's `programming-model.md`, 7.1, 7.2).
+    pub(crate) held: Queue<root::Event>,
     process_events: Queue<host::ProcessEvent>,
     processes: Map<Token, host::Process>,
     owners: Map<Token, Token>,
@@ -137,6 +140,7 @@ impl Worker {
             out: Queue::uncapped(),
             events: Queue::uncapped(),
             engine: Queue::with_capacity(ENGINE_EVENTS),
+            held: Queue::with_capacity(ENGINE_EVENTS),
             process_events: Queue::uncapped(),
             processes: Map::with_capacity(slots),
             owners: Map::with_capacity(slots),
@@ -221,6 +225,9 @@ impl Worker {
         for _ in 0..self.engine.len() {
             let _event = self.engine.pop();
         }
+        for _ in 0..self.held.len() {
+            let _event = self.held.pop();
+        }
         for _ in 0..self.out.len() {
             let _request = self.out.pop();
         }
@@ -256,7 +263,7 @@ impl Worker {
             }
     }
     /// Entries waiting between the worker's components. The capped engine
-    /// entrance is excluded so new work cannot hold itself at the watermark.
+    /// and held queues are excluded so new work cannot hold itself at the watermark.
     fn backlog(&self) -> u32 {
         self.events
             .len()
@@ -264,6 +271,34 @@ impl Worker {
             .saturating_add(self.process_events.len())
             .saturating_add(self.io.len())
             .saturating_add(self.root.backlog())
+    }
+    /// Retry held work first, then take the engine's answers past it (W5).
+    fn take_engine(&mut self) {
+        for _ in 0..self.held.len() {
+            let Some(event) = self.held.iter().next() else { break };
+            if root::is_new_work(event) && !root::admits(&self.env.limits, self.backlog()) {
+                break;
+            }
+            let event = self.held.pop().expect("held head inspected");
+            self.step(event);
+        }
+        for _ in 0..self.env.limits.watermark {
+            if self.held.room() == 0 {
+                break;
+            }
+            let Some(event) = self.engine.iter().next() else { break };
+            let hold = if self.held.is_empty() {
+                root::is_new_work(event) && !root::admits(&self.env.limits, self.backlog())
+            } else {
+                !root::passes(event)
+            };
+            let event = self.engine.pop().expect("engine head inspected");
+            if hold {
+                self.held.push(event);
+            } else {
+                self.step(event);
+            }
+        }
     }
     pub fn up(&mut self, now: Time, mut event: io::Event) {
         if self.git.component.accepts(&event) {
@@ -691,14 +726,7 @@ impl Worker {
             let Some(event) = self.events.pop() else { break };
             self.step(event);
         }
-        for _ in 0..self.env.limits.watermark {
-            let Some(event) = self.engine.iter().next() else { break };
-            if root::is_new_work(event) && !root::admits(&self.env.limits, self.backlog()) {
-                break;
-            }
-            let event = self.engine.pop().expect("engine head inspected");
-            self.step(event);
-        }
+        self.take_engine();
         // Progress taken in this iteration wins over an alarm due in it.
         if self.aborted.is_none() && self.events.is_empty() && self.root.is_due(now) {
             root::fire(&mut self.root, &self.env, &mut self.out);
@@ -775,6 +803,7 @@ impl Worker {
             || !self.io.is_empty()
             || !self.events.is_empty()
             || !self.engine.is_empty()
+            || !self.held.is_empty()
             || !self.process_events.is_empty()
             || !self.submitted.is_empty()
             || (self.aborted.is_none() && self.root.is_ready())
