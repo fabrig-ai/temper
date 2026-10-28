@@ -67,7 +67,7 @@ use temper_worker_domain::{self as root, wire};
 fn an_assignment_with_items_reaches_the_root_decoded_with_its_save() {
     let mut worker = fixtures::worker();
     worker.link(fixtures::NOW, fixtures::repository_assignment());
-    let root::Event::Assign { assignment, items, save } = worker.events.pop().unwrap() else {
+    let root::Event::Assign { assignment, items, save } = worker.engine.pop().unwrap() else {
         panic!("assignment with items");
     };
     assert_eq!(items.unwrap(), fixtures::one_repository());
