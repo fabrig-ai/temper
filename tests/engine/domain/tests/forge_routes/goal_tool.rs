@@ -82,14 +82,13 @@ fn a_chats_goal_is_unchanged() {
 
 #[test]
 fn a_goals_report_is_bounded_by_the_deployments_result_bytes() {
-    for advisor in [false, true] {
-        let (mut world, chat) = chat_world(100, 11, 3);
-        let tasks::Contract::Report { words } = live(&world, chat.task).contract else { panic!("chat report") };
-        let result_bytes = world.env.limits.tasks.result_bytes;
-        assert!(words < result_bytes, "the chat's own contract is smaller");
-        let task = delegated(goal(&mut world, &chat, 93, advisor));
-        assert_eq!(live(&world, task).contract, tasks::Contract::Report { words: result_bytes });
-    }
+    let (mut world, chat, run) = running_goal();
+    let tasks::Contract::Report { words } = live(&world, chat.task).contract else { panic!("chat report") };
+    let result_bytes = world.env.limits.tasks.result_bytes;
+    assert!(words < result_bytes, "the chat's own contract is smaller");
+    let advisor = delegated(goal(&mut world, &run, NESTED_GOAL_CALL, true));
+    assert_eq!(live(&world, run.task).contract, tasks::Contract::Report { words: result_bytes });
+    assert_eq!(live(&world, advisor).contract, tasks::Contract::Report { words: result_bytes });
 }
 
 #[test]
@@ -138,8 +137,8 @@ fn an_untracked_chats_goal_comes_last_among_the_projects_goals() {
 
 #[test]
 fn an_advisor_reads_alone_untracked() {
-    let (mut world, chat) = chat_world(100, 11, 3);
-    let task = delegated(goal(&mut world, &chat, 93, true));
+    let (mut world, _, run) = running_goal();
+    let task = delegated(goal(&mut world, &run, NESTED_GOAL_CALL, true));
     let row = live(&world, task);
     assert_eq!(row.tracked, None);
     assert_eq!(row.authority.tools, tasks::Tools(jig_domain_core::ToolFamilies::JIG.read.0));
@@ -256,25 +255,23 @@ fn a_goal_asks_its_requester_and_the_person_sees_the_question() {
     panic!("person's inbox not read");
 }
 
-#[test]
-fn a_goals_goal_without_advisor_is_refused_by_name() {
-    let (mut world, _, run) = running_goal();
+fn refused_goal(world: &mut World, run: &engine::Assignment, advisor: bool, expected: &[u8]) {
     world.until(Until::Ready);
     let (applied, rows) = (world.store.applied, world.store.rows.clone());
-    send_call(&mut world, &run, NESTED_GOAL_CALL, engine::Tool::Goal { words: WORDS.into(), advisor: false });
+    send_call(world, run, NESTED_GOAL_CALL, engine::Tool::Goal { words: WORDS.into(), advisor });
     world.until(Until::Ready);
     assert_eq!(
         world.call_errors,
         [temper_engine_domain_world::forge_routes::CallError {
             call: NESTED_GOAL_CALL.to_be_bytes().into(),
-            text: Box::from(&b"a goal starts an advisor alone: set advisor, or make the change with change"[..])
+            text: expected.into()
         }]
     );
     assert_eq!(world.store.applied, applied, "the refusal commits nothing");
     assert_eq!(world.store.rows, rows, "the refusal makes no task or call record");
     assert!(
         matches!(
-            call(&mut world, &run, CONTINUED_CALL, engine::Tool::ReadForge {
+            call(world, run, CONTINUED_CALL, engine::Tool::ReadForge {
                 repository: forge_world::REPO,
                 read: skein_forge::api::Read::Branch { branch: b"main".as_slice().into() },
             }),
@@ -285,9 +282,31 @@ fn a_goals_goal_without_advisor_is_refused_by_name() {
 }
 
 #[test]
+fn a_goals_goal_without_advisor_is_refused_by_name() {
+    let (mut world, _, run) = running_goal();
+    refused_goal(
+        &mut world,
+        &run,
+        false,
+        b"a goal starts an advisor alone: set advisor, or make the change with change",
+    );
+}
+
+#[test]
+fn a_chats_advisor_is_refused_by_name() {
+    let (mut world, chat) = chat_world(100, 11, 3);
+    refused_goal(
+        &mut world,
+        &chat,
+        true,
+        b"a chat's goal is the work: call goal without advisor, and its goal asks for one",
+    );
+}
+
+#[test]
 fn a_goal_uses_the_subtrees_remaining_task_allotment() {
     let (mut world, chat) = chat_world(400, 11, 3);
-    delegated(goal(&mut world, &chat, 93, true));
+    delegated(goal(&mut world, &chat, 93, false));
     let task = delegated(goal(&mut world, &chat, 94, false));
     assert_eq!(live(&world, task).authority.delegation.tasks, 9);
 }
@@ -300,28 +319,18 @@ fn oversized_goal_words_are_refused_as_a_delegate_spec() {
         engine::CallAnswer::DelegationRefused(p) if p.why == tasks::Refusal::Spec));
 }
 
-fn words_world() -> (World, engine::Assignment) {
-    // The ordinary goal fixture's funding and tree capacity; only its words differ.
-    const CHAT_CAP: u64 = 100;
-    const TREE_TASKS: u32 = 11;
-    const TREE_DEPTH: u32 = 3;
-    chat_world(CHAT_CAP, TREE_TASKS, TREE_DEPTH)
-}
-
 #[test]
 fn an_advisors_brief_opens_with_the_roots_line() {
-    for (advisor, expected) in [(true, [ADVISOR_PREFIX, WORDS].concat()), (false, WORDS.to_vec())] {
-        let (mut world, chat) = words_world();
-        let task = delegated(goal(&mut world, &chat, GOAL_CALL, advisor));
-        assert_eq!(live(&world, task).spec.words.as_ref(), expected.as_slice());
-    }
+    let (mut world, _, run) = running_goal();
+    let task = delegated(goal(&mut world, &run, NESTED_GOAL_CALL, true));
+    assert_eq!(live(&world, task).spec.words.as_ref(), [ADVISOR_PREFIX, WORDS].concat());
 }
 
 fn advisor_at_spec_edge(extra: usize) -> (World, engine::CallAnswer) {
-    let (mut world, chat) = words_world();
+    let (mut world, _, run) = running_goal();
     let bound = usize::try_from(world.env.limits.tasks.spec_bytes).expect("u32 fits usize");
     let words = vec![b'x'; bound - ADVISOR_PREFIX.len() + extra];
-    let answer = call(&mut world, &chat, GOAL_CALL, engine::Tool::Goal { words: words.into(), advisor: true });
+    let answer = call(&mut world, &run, NESTED_GOAL_CALL, engine::Tool::Goal { words: words.into(), advisor: true });
     (world, answer)
 }
 
