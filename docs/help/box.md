@@ -115,6 +115,14 @@ by it. A start whose stored state is refused prints, in place of a sign-in link,
 `temper serve: restart refused during STEP`; the box starts serve
 again a few times, each saying the same, then gives up and exits 1:
 keep `DATA` as it is and report the line as a finding.
+A store an older build wrote, whose layout this build doesn't read,
+prints `temper serve: DATA/deployment holds a store from an older
+build, whose FAMILY family's layout differs from this build's, ...`,
+retried and given up the same way. Before the first release a store
+isn't translated. To start afresh, stop the box, move `active`,
+`generations/` and `transcripts/` out of `DATA/deployment` together,
+and start it again: nothing is deleted, and the new store has no
+tasks, sign-ins, accounts or keys, so every client signs in again.
 
 ## 3. Sign in
 
