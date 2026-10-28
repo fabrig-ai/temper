@@ -115,12 +115,13 @@ fn release(world: &mut World, change: u64) {
 fn reviewer(world: &mut World, change: u64) -> engine::Assignment {
     for _ in 0..200 {
         world.tick();
-        if world.assigned.len() == 3 {
+        if world.assigned.iter().any(|run| run.charter == 4) {
             break;
         }
     }
-    assert_eq!(world.assigned.len(), 3, "exactly one reviewer");
-    let gate = world.assigned[2].clone();
+    let reviewers: Vec<_> = world.assigned.iter().filter(|run| run.charter == 4).collect();
+    assert_eq!(reviewers.len(), 1, "exactly one reviewer: phase={:?}, change={:?}, assignments={:?}", live_task(world, change).phase, change_row(world, change).change, world.assigned.iter().map(|run| (run.task, run.charter)).collect::<Vec<_>>());
+    let gate = reviewers[0].clone();
     assert!(matches!(change_row(world, change).delegate,
         Some((child, policy::Delegate::Gate { head, .. })) if child == gate.task
             && Some(head) == change_row(world, change).change.last_head));
@@ -171,13 +172,35 @@ fn a_change_whose_review_step_is_refused_asks_again_at_its_next_step() {
     let (mut world, change, head) = checking();
     pause_checking(&mut world);
     let prior = change_row(&world, change).change.clone();
-    // No child slot remains when jig admits the review batch. Restore the
-    // room before the next controlled wake; no production limit changes.
-    let delegates = world.env.limits.tasks.delegates;
-    world.env.limits.tasks.delegates = 0;
+    // Fill the change's actual delegate room through jig, without changing
+    // configured limits. These report tasks occupy no forge delegate slot.
+    let chat = world.assigned[0].clone();
+    for position in 0..world.env.limits.tasks.delegates {
+        let mut member = temper_engine_domain_world::fixtures::report_delegate(b"occupy child room", Box::new([]));
+        member.executor = tasks::Executor::Agent { charter: 2 };
+        member.authority.tools = tasks::Tools(0);
+        member.authority.budget.spend = 6;
+        let step = live_task(&world, change).attempt + 1;
+        world.send(engine::Event::Party(engine::PartyInput::ProcedureStep {
+            task: change, step, connector: 0, code: 2,
+            decision: jig_domain_core::ProcedureStep { batch: Box::new([member]), ..jig_domain_core::ProcedureStep::new(jig_domain_core::StepEnd::Wait) },
+        }));
+        for _ in 0..20 { world.tick(); }
+        assert_eq!(live_task(&world, change).delegates.len(), position as usize + 1,
+            "occupant admitted: {:?}", std::iter::from_fn(|| world.root.pop_fact()).collect::<Vec<_>>());
+        // Wake a fresh step while the read chain is still paused.
+        let event = world.protocol.call(Token::new(7), chat.task, chat.attempt, 94 + u64::from(position), engine::Call {
+            completion: 1, position: 2 + position,
+            tool: engine::Tool::Message { target: change, form: engine::MessageForm::Words, words: b"check again".as_slice().into() },
+        });
+        world.send(event);
+        for _ in 0..20 { world.tick(); }
+    }
+    let mut occupants = live_task(&world, change).delegates.to_vec();
+    assert_eq!(occupants.len(), world.env.limits.tasks.delegates as usize, "delegate room full");
     pass_ci(&mut world, head);
     finish_reads(&mut world);
-    assert_eq!(world.assigned.len(), 2);
+    assert!(world.assigned.iter().all(|run| run.charter != 4));
     assert_eq!(change_row(&world, change).change, prior);
     assert!(
         std::iter::from_fn(|| world.root.pop_fact()).any(|fact| matches!(fact,
@@ -185,10 +208,22 @@ fn a_change_whose_review_step_is_refused_asks_again_at_its_next_step() {
             && problem.why == tasks::Refusal::Delegates)),
         "jig refused the review batch"
     );
-    world.env.limits.tasks.delegates = delegates;
+    while !occupants.is_empty() {
+        for _ in 0..100 {
+            if world.assigned.iter().any(|run| occupants.contains(&run.task)) { break; }
+            world.tick();
+        }
+        let run = world.assigned.iter().find(|run| occupants.contains(&run.task)).expect("an occupant runs").clone();
+        let event = world.protocol.answer(Token::new(7), run.task, run.attempt, 5, tasks::End::Finished {
+            result: tasks::TaskResult::Report { words: b"room free".as_slice().into() }, cancel_delegates: false,
+        }, engine::Parts::none());
+        world.send(event);
+        occupants.retain(|task| *task != run.task);
+        for _ in 0..40 { world.tick(); }
+    }
     world.env.now = world.env.now.saturating_add(Duration::from_secs(30));
     let gate = reviewer(&mut world, change);
-    approve(&mut world, change, &gate);
+    assert_eq!(change_row(&world, change).delegate.map(|(task, _)| task), Some(gate.task));
 }
 
 #[test]
@@ -208,4 +243,50 @@ fn a_reviewer_made_before_the_stop_is_kept_and_not_asked_again() {
     assert!(world.assigned.iter().all(|assignment| assignment.task != change));
     let reviewers: Vec<_> = world.assigned.iter().skip(2).map(|assignment| assignment.task).collect();
     assert!(reviewers.iter().all(|task| *task == gate.task), "only the same reviewer resumes");
+}
+
+#[test]
+fn a_review_and_its_change_survive_a_restart_at_the_admission_commit() {
+    let (mut world, change, head) = checking();
+    pass_ci(&mut world, head);
+    world.env.now = world.env.now.saturating_add(Duration::from_secs(30));
+    let mut admitted = None;
+    for _ in 0..200 {
+        if let Some(event) = world.events.pop_front() {
+            world.send(event);
+        } else {
+            world.tick();
+        }
+        for (_, writes) in &world.store.pending {
+            let child = writes.iter().find_map(|write| match write {
+                engine::Write::Save(Record::Forge { row, .. }) => match row.as_ref() {
+                    forge_top::Stored::Change(row) if row.task == change => match row.delegate {
+                        Some((child, policy::Delegate::Gate { .. })) => Some(child),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                _ => None,
+            });
+            if let Some(child) = child {
+                assert!(writes.iter().any(|write| matches!(write,
+                    engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))))
+                        if row.number == change && row.delegates.contains(&child))), "parent admission shares the change save");
+                assert!(writes.iter().any(|write| matches!(write,
+                    engine::Write::Save(Record::Core(jig_domain_core::Record::Tasks(tasks::Stored::Live(row))))
+                        if row.number == child)), "new reviewer shares the change save");
+                admitted = Some(child);
+            }
+        }
+        if admitted.is_some() { break; }
+    }
+    let child = admitted.expect("review admission commit");
+    // Persist the decision and lose its terminal before any worker sees the
+    // new reviewer. Only the durable transaction crosses this process cut.
+    while !world.store.pending.is_empty() { world.store.apply(); }
+    assert_eq!(world.assigned.len(), 2, "reviewer has not been delivered");
+    world.restart(true, true);
+    let gate = reviewer(&mut world, change);
+    assert_eq!(gate.task, child, "restart keeps the admitted reviewer identity");
+    approve(&mut world, change, &gate);
 }
