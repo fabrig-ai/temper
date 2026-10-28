@@ -20,10 +20,14 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
   priority, with the host tool `delegate`, or with `goal`, which
   takes the work's words alone and fills in the rest from the run's
   own authority, last among the project's goals; or a party accepts a
-  proposal that makes one; or an amendment tracks a task. A goal's own
-  `goal` is an advisor alone: one without `advisor` is refused, and the
-  run goes on: `a goal starts an advisor alone: set advisor, or make
-  the change with change`.
+  proposal that makes one; or an amendment tracks a task. An advisor
+  is a goal's alone, and the run goes on after either refusal: a goal's
+  own `goal` without `advisor` is refused, `a goal starts an advisor
+  alone: set advisor, or make the change with change`; any other run's
+  `goal` with `advisor` set, a chat's among them, is refused, `a chat's
+  goal is the work: call goal without advisor, and its goal asks for
+  one`. A person who wants a survey alone gets a goal that asks its
+  advisor and reports, changing nothing.
 - **Reprioritised:** an amendment of its priority alone needs no
   spec revision; tracking an untracked task, or untracking a goal,
   names the spec revision the amender saw.
@@ -50,7 +54,8 @@ A goal is a tracked task: work given a numeric priority, which orders the goals'
 - **temper's runs** make goals with `goal` or `delegate` and
   reprioritise their delegates with `amend`; `goal` with `advisor`
   makes an untracked delegate instead, which reads and reports and
-  can change nothing: the only `goal` a goal may call.
+  can change nothing: the only `goal` a goal may call, and one no
+  other run may.
 
 ## Limits
 
