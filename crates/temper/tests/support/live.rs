@@ -33,7 +33,7 @@ pub fn configure(directory: &Path, forge: &Throwaway) -> String {
             agent["programs"].as_object_mut().expect("programs").remove("claude_code");
         }
     }
-    agent["profile"]["policy"]["max_turns"] = 8.into();
+    agent["profile"]["policy"]["max_turns"] = 16.into();
     value["workers"][0]["limits"]["overrides"]["hub.event_bytes"] = 4096.into();
     value["application"]["limits"]["overrides"]["checkout.message_bytes"] = 4098.into();
     let scripts = super::landing_scripts(super::ANSWER, forge);

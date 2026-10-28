@@ -26,7 +26,7 @@ pub(crate) fn documents(directory: &Path, program: &Path, bundle: &Path) -> (Box
     let agent = serde_json::json!({
         "profile":{"name":"standard","declared":{"memory":2_147_483_648_u64,"tool_payload":2048,"read_window":256,
             "conversations":1,"calls_per_response":1},
-            "policy":{"max_turns":8,"group_stop":10,"inbox":8,"unacknowledged":8,"check_timeout":60000}},
+            "policy":{"max_turns":16,"group_stop":10,"inbox":8,"unacknowledged":8,"check_timeout":60000}},
         "endpoints":[{"name":"fake","number":0,"dialect":3,"provider":"openai",
             "address":UNREACHED,"transport":"tls","server_name":"skein.test","trust_der":directory.join("root.der"),
             "identity":"plain","connect":1000,"handshake":1000,

@@ -9,7 +9,7 @@
       "calls_per_response": 1
     }},
     "policy": {{
-      "max_turns": 8,
+      "max_turns": 16,
       "group_stop": 10,
       "inbox": 8,
       "unacknowledged": 1,

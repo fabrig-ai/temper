@@ -637,7 +637,8 @@ fn serve_checks_the_owned_agents_admission_at_each_bound() {
         serde_json::from_slice(&fs::read(&path).expect("agent fixture")).expect("agent JSON");
     for (member, value, expected) in [
         ("max_turns", 7, Some("charter 1.turns: needs 8 turns; the agent's profile.policy.max_turns allows 7\n")),
-        ("max_turns", 8, None),
+        ("max_turns", 15, Some("charter 2.turns: needs 16 turns; the agent's profile.policy.max_turns allows 15\n")),
+        ("max_turns", 16, None),
         (
             "check_timeout",
             60001,
