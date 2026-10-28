@@ -80,7 +80,12 @@ makes the change ready again, and the landing prepares again.
 
 - `landing show` reads a landing: its change, the candidate on its base,
   each gate's key with its receipt or run, and the turn. `landing list`
-  lists a project's landings, the turn's holder first.
+  lists a project's landings, the turn's holder first, a page at a
+  time. With `--newer-than TIME`, UTC to the minute, it lists instead
+  every landing its repositories' landing branches took after TIME,
+  by queue, by turn or from outside temper, newest first, each with
+  the time temper saw it, its changes and each tier's verdict
+  (temper help tier).
 - `change show` reads the change's own way: its pull request and gates.
 - A held landing is released or cancelled by the project's
   maintainers, as any held task is.
@@ -103,6 +108,8 @@ makes the change ready again, and the landing prepares again.
   repository, the ignored paths of a gate and the receipts a gate
   keeps. A change whose landing would pass one waits, ready, until there is
   room.
+- temper keeps each repository's last 16 landings in the small
+  profile: `--newer-than` lists no older one.
 - A runner's faults are retried twice per key, then the landing is
   held.
 - A gate keeps its newest receipts, and always the receipt of its
