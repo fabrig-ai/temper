@@ -87,6 +87,7 @@ struct StepPrior {
     pull: Option<u64>,
     pending: Option<u64>,
     effect: change::EffectResult,
+    effect_account: Option<crate::EffectAccount>,
     drift: Option<change::Hold>,
     queue_repair: Option<u64>,
     queue_repairs: u32,
@@ -2905,6 +2906,7 @@ fn remember_step(d: &mut Domain, pending: &PendingStep) {
             pull: row.pull,
             pending: row.pending,
             effect: row.effect,
+            effect_account: row.effect_account.clone(),
             drift: row.drift,
             queue_repair: row.queue_repair,
             queue_repairs: row.queue_repairs,
@@ -3062,6 +3064,7 @@ fn procedure_resolved(d: &mut Domain, env: &Env<Limits>, task: u64, step: u64, m
     previous.pull = prior.pull;
     previous.pending = prior.pending;
     previous.effect = prior.effect;
+    previous.effect_account = prior.effect_account;
     previous.drift = prior.drift;
     previous.queue_repair = prior.queue_repair;
     previous.queue_repairs = prior.queue_repairs;
